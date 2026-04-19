@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sony Lens Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <div>
+                    <h1><i class="fas fa-camera"></i> Sony RAW Lens Manager</h1>
+                    <p class="subtitle">Add lens information to your Sony RAW files</p>
+                </div>
+                <div class="header-actions">
+                    <button id="openLensManagerBtn" class="btn btn-outline">
+                        <i class="fas fa-sliders-h"></i> Manage Lenses
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="upload-section">
+                    <h2><i class="fas fa-upload"></i> Upload Photos</h2>
+                    <div class="upload-area" id="uploadArea">
+                        <i class="fas fa-cloud-upload-alt fa-3x"></i>
+                        <p>Drag & Drop Sony RAW (.arw) files here</p>
+                        <p class="upload-hint">or click to browse</p>
+                        <input type="file" id="fileInput" multiple accept=".arw,.ARW,.jpg,.jpeg">
+                    </div>
+
+                    <!-- Upload Progress Section -->
+                    <div class="upload-progress-section" id="uploadProgressSection" style="display: none;">
+                        <h3><i class="fas fa-cloud-upload-alt"></i> Upload Progress</h3>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="uploadProgressFill"></div>
+                        </div>
+                        <div id="uploadProgressText" class="progress-text">Preparing upload...</div>
+                        <div id="uploadFileList" class="file-list-progress"></div>
+                    </div>
+
+                    <div class="upload-controls">
+                        <button id="clearBtn" class="btn secondary">
+                            <i class="fas fa-trash"></i> Clear All
+                        </button>
+                        <button id="cleanupTempBtn" class="btn secondary">
+                            <i class="fas fa-broom"></i> Clean Temp Files
+                        </button>
+                        <div class="file-count">
+                            <span id="fileCount">0</span> files selected
+                        </div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h2><i class="fas fa-cog"></i> Settings</h2>
+                    <div class="setting-item">
+                        <div>
+                            <div class="setting-label">Keep Original Filenames</div>
+                            <div class="setting-description">Files will be saved with original names in downloads folder
+                            </div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="keepOriginalToggle" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="lens-selection">
+                    <h2><i class="fas fa-lens"></i> Select Lens</h2>
+                    <div class="lens-list" id="lensList">
+                        <div class="empty-state">Loading lenses...</div>
+                    </div>
+
+                    <div class="apply-section">
+                        <button id="applyBtn" class="btn primary" disabled>
+                            <i class="fas fa-magic"></i> Apply Lens to Selected Photos
+                        </button>
+                        <div class="selection-info">
+                            <span id="selectedCount">0</span> photos selected for processing
+                        </div>
+                    </div>
+                </div>
+
+                <div class="additional-controls">
+                    <button id="viewDownloadsBtn" class="btn info">
+                        <i class="fas fa-folder-open"></i> Open Downloads
+                    </button>
+                    <button id="clearDownloadsBtn" class="btn warning">
+                        <i class="fas fa-trash"></i> Clear Downloads
+                    </button>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="preview-header">
+                    <h2><i class="fas fa-images"></i> Photo Preview</h2>
+                    <div class="header-controls">
+                        <button id="selectAllBtn" class="btn small">
+                            <i class="fas fa-check-square"></i> Select All
+                        </button>
+                        <button id="deselectAllBtn" class="btn small">
+                            <i class="fas fa-square"></i> Deselect All
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Processing Section -->
+                
+                <div class="processing-section" id="processingSection" style="display: none;">
+                    <h3><i class="fas fa-sync fa-spin"></i> Processing...</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="processing-info" id="processingInfo"></div>
+                    <div id="progressText" style="margin-top: 10px; font-size: 0.9em; color: #2c3e50;"></div>
+                    <div id="progressList"
+                        style="max-height: 200px; overflow-y: auto; margin-top: 10px; font-size: 0.85em;"></div>
+                </div>
+
+                <div class="preview-grid" id="previewGrid">
+                    <div class="empty-state">
+                        <i class="fas fa-images fa-3x"></i>
+                        <p>No photos uploaded yet</p>
+                        <p>Upload Sony RAW (.arw) files to get started</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="notification" id="notification"></div>
+    </div>
+
+    <!-- Photo Preview Modal -->
+    <div id="photoModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 id="modalPhotoName">Photo Preview</h2>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-image-container">
+                    <img id="modalImage" src="" alt="Photo preview">
+                </div>
+                <div class="modal-info">
+                    <div class="modal-metadata" id="modalMetadata"></div>
+                    <div class="modal-actions">
+                        <button id="modalApplyBtn" class="btn primary">Apply Selected Lens</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lens Manager Modal -->
+    <div id="lensManagerModal" class="modal lens-manager-modal">
+        <div class="modal-content modal-xl">
+            <div class="modal-header">
+                <h2><i class="fas fa-sliders-h"></i> Lens Catalog Manager</h2>
+                <button class="modal-close" id="closeLensManagerBtn">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 0; height: calc(90vh - 70px);">
+                <iframe id="lensManagerIframe" src="/lens-manager"
+                    style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection Bar -->
+    <div id="selectionBar" class="selection-bar" style="display: none;">
+        <div class="selection-info">
+            <span class="selection-count-wrapper">
+                <span id="selectionCount">0</span> photos selected
+            </span>
+            <button id="clearSelectionBtn" class="btn small">Clear Selection</button>
+            <button id="removeSelectedBtn" class="btn small warning">
+                <i class="fas fa-trash"></i> Remove Selected
+            </button>
+            <button id="applyToSelectedBtn" class="btn primary small">Apply Lens to Selected</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
