@@ -61,16 +61,28 @@
 
                 <div class="settings-section">
                     <h2><i class="fas fa-cog"></i> Settings</h2>
+                    
+                    <!-- Keep Original Filenames Toggle -->
                     <div class="setting-item">
                         <div>
                             <div class="setting-label">Keep Original Filenames</div>
-                            <div class="setting-description">Files will be saved with original names in downloads folder
-                            </div>
+                            <div class="setting-description">Files will be saved with original names in downloads folder</div>
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" id="keepOriginalToggle" checked>
                             <span class="toggle-slider"></span>
                         </label>
+                    </div>
+                    
+                    <!-- Output Folder Selection -->
+                    <div class="setting-item">
+                        <div>
+                            <div class="setting-label">Output Folder</div>
+                            <div class="setting-description" id="outputFolderDisplay">Loading...</div>
+                        </div>
+                        <button id="selectOutputFolderBtn" class="btn small secondary">
+                            <i class="fas fa-folder-open"></i> Choose Folder
+                        </button>
                     </div>
                 </div>
 
@@ -114,7 +126,6 @@
                 </div>
 
                 <!-- Processing Section -->
-                
                 <div class="processing-section" id="processingSection" style="display: none;">
                     <h3><i class="fas fa-sync fa-spin"></i> Processing...</h3>
                     <div class="progress-bar">
@@ -131,6 +142,7 @@
                         <i class="fas fa-images fa-3x"></i>
                         <p>No photos uploaded yet</p>
                         <p>Upload Sony RAW (.arw) files to get started</p>
+                        <p class="upload-hint">Shift+click to select multiple photos</p>
                     </div>
                 </div>
             </div>
@@ -174,17 +186,27 @@
         </div>
     </div>
 
-    <!-- Selection Bar -->
+    <!-- Selection Bar (with integrated lens selector) -->
     <div id="selectionBar" class="selection-bar" style="display: none;">
         <div class="selection-info">
             <span class="selection-count-wrapper">
                 <span id="selectionCount">0</span> photos selected
             </span>
-            <button id="clearSelectionBtn" class="btn small">Clear Selection</button>
-            <button id="removeSelectedBtn" class="btn small warning">
-                <i class="fas fa-trash"></i> Remove Selected
+            
+            <!-- Lens selector dropdown in selection bar -->
+            <div class="selection-lens-selector">
+                <select id="selectionLensSelect" class="lens-select">
+                    <option value="">-- Select Lens --</option>
+                </select>
+            </div>
+            
+            <button id="applyToSelectedBtn" class="btn primary small" disabled>
+                <i class="fas fa-magic"></i> Apply Lens
             </button>
-            <button id="applyToSelectedBtn" class="btn primary small">Apply Lens to Selected</button>
+            <button id="clearSelectionBtn" class="btn small">Clear</button>
+            <button id="removeSelectedBtn" class="btn small warning">
+                <i class="fas fa-trash"></i> Remove
+            </button>
         </div>
     </div>
 

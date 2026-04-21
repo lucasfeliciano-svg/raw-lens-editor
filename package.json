@@ -9,21 +9,22 @@
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:mac:arm64": "electron-builder --mac --arm64",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
     "postinstall": "electron-builder install-app-deps"
   },
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^41.2.1",
-    "electron-builder": "^26.8.1"
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
   },
   "dependencies": {
-    "canvas": "^3.2.3",
+    "body-parser": "^1.20.2",
     "cors": "^2.8.5",
-    "exiftool": "^0.0.3",
-    "exiftool-vendored": "^34.3.0",
     "express": "^4.18.2",
     "multer": "^1.4.5-lts.1",
+    "pdfkit": "^0.18.0",
     "sharp": "^0.33.0"
   },
   "build": {
@@ -39,38 +40,26 @@
       "package.json",
       "lenses.json",
       "public/**/*",
-      "public/index.html",
-      "public/style.css",
-      "public/script.js",
-      "public/lens-manager.html",
-      "public/lens-manager.js",
-      "public/lens-manager.css",
-      "node_modules/**/*"
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*",
+      "node_modules/express/**/*",
+      "node_modules/cors/**/*",
+      "node_modules/multer/**/*",
+      "node_modules/body-parser/**/*"
     ],
-    "extraResources": [
-      {
-        "from": "public",
-        "to": "public"
-      },
-      {
-        "from": "lenses.json",
-        "to": "lenses.json"
-      }
+    "asarUnpack": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*"
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.photography",
       "hardenedRuntime": true,
       "gatekeeperAssess": false
-    },
-    "asar": true,
-    "asarUnpack": [
-      "**/node_modules/exiftool-vendored/**/*",
-      "**/node_modules/sharp/**/*",
-      "**/node_modules/canvas/**/*",
-      "node_modules/exiftool-vendored/**/*"
-    ]
+    }
   }
 }

@@ -1,439 +1,780 @@
-
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lens Catalog Manager - Sony Lens Manager</title>
+    <title>Lens Catalog Manager</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
     <style>
-        /* Lens Manager Specific Styles */
-        .lens-manager-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        .header-bar {
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .lens-manager-container {
+            display: flex;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        /* Left Panel - Lens List */
+        .lens-list-panel {
+            width: 350px;
+            background: white;
+            border-right: 1px solid #e9ecef;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 20px;
+            border-bottom: 1px solid #e9ecef;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid #e9ecef;
         }
 
-        .lens-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 25px;
-            margin-top: 20px;
+        .panel-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #2c3e50;
         }
 
-        .lens-catalog-card {
-            background: white;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        .lens-search {
+            padding: 15px 20px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .lens-search input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .lens-items {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .lens-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 10px;
             cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 5px;
         }
 
-        .lens-catalog-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        .lens-item:hover {
+            background: #f0f4ff;
         }
 
-        .lens-card-image {
-            height: 200px;
-            background: #f8f9fa;
+        .lens-item.active {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-left: 3px solid #667eea;
+        }
+
+        .lens-item-image {
+            width: 50px;
+            height: 50px;
+            border-radius: 8px;
+            background: #f0f4ff;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            position: relative;
+            flex-shrink: 0;
         }
 
-        .lens-card-image img {
+        .lens-item-image img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
 
-        .lens-card-image .no-image {
-            text-align: center;
-            color: #bdc3c7;
+        .lens-item-image i {
+            font-size: 24px;
+            color: #667eea;
         }
 
-        .lens-card-image .no-image i {
-            font-size: 48px;
-            margin-bottom: 10px;
+        .lens-item-info {
+            flex: 1;
+            min-width: 0;
         }
 
-        .lens-card-info {
-            padding: 20px;
-        }
-
-        .lens-card-title {
-            font-size: 1.2em;
+        .lens-item-name {
             font-weight: 600;
+            font-size: 14px;
             color: #2c3e50;
-            margin-bottom: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .lens-card-specs {
+        .lens-item-specs {
+            font-size: 12px;
             color: #7f8c8d;
-            font-size: 0.9em;
-            margin-bottom: 15px;
+            margin-top: 2px;
         }
 
-        .lens-card-specs span {
+        .lens-item-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            background: #e9ecef;
+            color: #7f8c8d;
+            margin-top: 4px;
             display: inline-block;
-            background: #f0f4ff;
-            padding: 4px 8px;
-            border-radius: 5px;
-            margin-right: 8px;
-            font-size: 0.85em;
         }
 
-        .lens-card-actions {
+        /* Right Panel - Editor */
+        .editor-panel {
+            flex: 1;
             display: flex;
-            gap: 10px;
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #e9ecef;
+            flex-direction: column;
+            overflow: hidden;
+            background: #f5f7fa;
         }
 
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            justify-content: center;
+        .editor-header {
+            padding: 20px 30px;
+            background: white;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
         }
 
-        .modal-content {
-            background: white;
-            border-radius: 15px;
-            max-width: 800px;
-            width: 90%;
-            max-height: 90vh;
+        .editor-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .editor-content {
+            flex: 1;
             overflow-y: auto;
             padding: 30px;
         }
 
-        .modal-header {
+        /* Form Tabs */
+        .form-tabs {
             display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
+            gap: 5px;
+            margin-bottom: 25px;
             border-bottom: 2px solid #e9ecef;
+            padding-bottom: 0;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            background: none;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #7f8c8d;
+            cursor: pointer;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.2s;
+            margin-bottom: -2px;
+        }
+
+        .tab-btn:hover {
+            background: #f0f4ff;
+            color: #2c3e50;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Form Styles */
+        .form-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 18px;
         }
 
         .form-group {
-            margin-bottom: 20px;
+            flex: 1;
+        }
+
+        .form-group.full-width {
+            flex: 1 1 100%;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
+            font-size: 13px;
             font-weight: 600;
             color: #2c3e50;
+            margin-bottom: 6px;
         }
 
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 10px;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        /* Image Preview Section */
+        .image-preview-section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .current-image-container {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .lens-preview-image {
+            width: 120px;
+            height: 120px;
+            border-radius: 12px;
+            background: #f0f4ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
             border: 2px solid #e9ecef;
+        }
+
+        .lens-preview-image img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .lens-preview-image i {
+            font-size: 48px;
+            color: #667eea;
+        }
+
+        .image-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .image-upload-area {
+            margin-top: 20px;
+        }
+
+        .image-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .image-thumbnail {
+            width: 80px;
+            height: 80px;
             border-radius: 8px;
-            font-size: 1em;
+            background: #f0f4ff;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid #e9ecef;
         }
 
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
+        .image-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
 
-        .image-preview {
-            max-width: 200px;
-            max-height: 200px;
-            margin-top: 10px;
-            border-radius: 8px;
+        .image-thumbnail .remove-image {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            background: rgba(231, 76, 60, 0.9);
+            color: white;
+            border: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
         }
 
+        /* Buttons */
         .btn {
             padding: 10px 20px;
             border: none;
             border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
-            font-size: 1em;
-            transition: all 0.3s ease;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .btn-primary {
+        .btn.primary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
 
-        .btn-danger {
+        .btn.primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn.secondary {
+            background: #e9ecef;
+            color: #2c3e50;
+        }
+
+        .btn.secondary:hover {
+            background: #dee2e6;
+        }
+
+        .btn.danger {
             background: #e74c3c;
             color: white;
         }
 
-        .btn-secondary {
-            background: #95a5a6;
-            color: white;
+        .btn.danger:hover {
+            background: #c0392b;
         }
 
-        .search-bar {
-            margin-bottom: 20px;
+        .btn.small {
+            padding: 6px 12px;
+            font-size: 12px;
         }
 
-        .search-bar input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            font-size: 1em;
+        .btn.icon-only {
+            padding: 8px;
         }
 
-        .status-badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 0.75em;
-            font-weight: 600;
+        /* Status Toggle */
+        .status-toggle {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
         }
 
-        .status-active {
-            background: #d4edda;
-            color: #155724;
+        .status-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
         }
 
-        .status-inactive {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
+        /* Empty State */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
             color: #bdc3c7;
         }
+
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        /* Notification */
+        .notification {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        .notification.success {
+            background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+        }
+
+        .notification.error {
+            background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
+        }
+
+        .notification.info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Checkbox styling */
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .lens-manager-container {
+                flex-direction: column;
+            }
+            
+            .lens-list-panel {
+                width: 100%;
+                max-height: 300px;
+            }
+        }
     </style>
 </head>
-
-<script>
-    // Check if we're in an iframe (modal mode)
-    if (window.self !== window.top) {
-        // We're in an iframe - hide the back button and adjust layout
-        document.addEventListener('DOMContentLoaded', function() {
-            const backButton = document.querySelector('.header-bar .btn-secondary');
-            if (backButton && backButton.textContent.includes('Back to Main App')) {
-                backButton.style.display = 'none';
-            }
-            
-            // Add a close button to the lens manager header
-            const headerBar = document.querySelector('.header-bar');
-            if (headerBar) {
-                const closeBtn = document.createElement('button');
-                closeBtn.className = 'btn btn-secondary';
-                closeBtn.style.marginLeft = 'auto';
-                closeBtn.style.background = 'rgba(255,255,255,0.2)';
-                closeBtn.style.border = 'none';
-                closeBtn.innerHTML = '<i class="fas fa-times"></i> Close';
-                closeBtn.onclick = function() {
-                    window.parent.postMessage({ type: 'CLOSE_LENS_MANAGER' }, '*');
-                };
-                headerBar.appendChild(closeBtn);
-            }
-        });
-    }
-    
-    // Notify parent when lenses are added/updated/deleted
-    const originalFetch = window.fetch;
-    window.fetch = function(...args) {
-        return originalFetch.apply(this, args).then(async (response) => {
-            const url = args[0];
-            const clonedResponse = response.clone();
-            const data = await clonedResponse.json().catch(() => null);
-            
-            // Check if this is a lens modification operation
-            if (typeof url === 'string') {
-                if (url.includes('/api/lenses') && 
-                    (args[1]?.method === 'POST' || args[1]?.method === 'PUT' || args[1]?.method === 'DELETE')) {
-                    if (data && data.success) {
-                        // Notify parent that lenses were modified
-                        window.parent.postMessage({ 
-                            type: 'LENSES_UPDATED', 
-                            action: args[1]?.method,
-                            lens: data.lens 
-                        }, '*');
-                    }
-                }
-            }
-            
-            return response;
-        });
-    };
-</script>
-
 <body>
     <div class="lens-manager-container">
-        <div class="header-bar">
-            <div>
-                <h1><i class="fas fa-sliders-h"></i> Lens Catalog Manager</h1>
-                <p>Manage your lens collection with photos and specifications</p>
-            </div>
-            <div>
-                <a href="/" class="btn btn-secondary">
-                    <i class="fas fa-arrow-left"></i> Back to Main App
-                </a>
-                <button onclick="openLensModal()" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Add New Lens
+        <!-- Left Panel - Lens List -->
+        <div class="lens-list-panel">
+            <div class="panel-header">
+                <h3><i class="fas fa-lens"></i> Your Lenses</h3>
+                <button class="btn primary small" id="addNewLensBtn">
+                    <i class="fas fa-plus"></i> Add Lens
                 </button>
             </div>
-        </div>
-
-        <div class="search-bar">
-            <input type="text" id="searchLenses" placeholder="Search lenses by name, manufacturer, or focal length...">
-        </div>
-
-        <div id="lensGrid" class="lens-grid">
-            <!-- Lenses will be loaded here -->
-        </div>
-    </div>
-
-    <!-- Modal for Add/Edit Lens -->
-    <div id="lensModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modalTitle">Add New Lens</h2>
-                <button onclick="closeModal()"
-                    style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
+            <div class="lens-search">
+                <input type="text" id="lensSearchInput" placeholder="Search lenses...">
             </div>
-            <form id="lensForm">
-                <input type="hidden" id="lensId">
-
-                <div class="form-group">
-                    <label for="lensImage">Lens Photo</label>
-                    <input type="file" id="lensImage" accept="image/*">
-                    <div id="imagePreview"></div>
+            <div class="lens-items" id="lensList">
+                <div class="empty-state">
+                    <i class="fas fa-camera"></i>
+                    <p>No lenses yet</p>
+                    <p>Click "Add Lens" to get started</p>
                 </div>
+            </div>
+        </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="lensName">Lens Name *</label>
-                        <input type="text" id="lensName" required placeholder="e.g., Sony FE 35mm F1.4 GM">
-                    </div>
-                    <div class="form-group">
-                        <label for="lensMaker">Manufacturer *</label>
-                        <input type="text" id="lensMaker" required placeholder="e.g., Sony, Zeiss, Canon">
-                    </div>
+        <!-- Right Panel - Editor -->
+        <div class="editor-panel">
+            <div class="editor-header">
+                <h2 id="editorTitle">Select a lens or create new</h2>
+                <div class="editor-actions">
+                    <button class="btn secondary" id="cancelEditBtn" style="display: none;">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button class="btn primary" id="saveLensBtn" style="display: none;">
+                        <i class="fas fa-save"></i> Save Lens
+                    </button>
+                    <button class="btn danger" id="deleteLensBtn" style="display: none;">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
                 </div>
+            </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="lensType">Lens Type *</label>
-                        <select id="lensType">
-                            <option value="prime">Prime (Fixed Focal Length)</option>
-                            <option value="zoom">Zoom (Variable Focal Length)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="lensAperture">Aperture *</label>
-                        <input type="text" id="lensAperture" required placeholder="e.g., F1.4 or F2.8-4">
-                    </div>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="focalLengthDisplay">Focal Length Display *</label>
-                        <input type="text" id="focalLengthDisplay" required placeholder="e.g., 35mm or 24-70mm">
-                    </div>
-                </div>
-
-                <div id="fixedFocalGroup" class="form-group">
-                    <label for="fixedFocalLength">Fixed Focal Length (for prime) *</label>
-                    <input type="number" id="fixedFocalLength" step="1" placeholder="35">
-                </div>
-
-                <div id="zoomFocalGroup" class="form-group" style="display: none;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="minFocalLength">Min Focal Length *</label>
-                            <input type="number" id="minFocalLength" step="1" placeholder="24">
-                        </div>
-                        <div class="form-group">
-                            <label for="maxFocalLength">Max Focal Length *</label>
-                            <input type="number" id="maxFocalLength" step="1" placeholder="70">
+            <div class="editor-content">
+                <form id="lensForm" style="display: none;">
+                    <!-- Image Preview Section -->
+                    <div class="image-preview-section">
+                        <div class="current-image-container">
+                            <div class="lens-preview-image" id="lensPreviewImage">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                            <div class="image-actions">
+                                <button type="button" class="btn secondary small" id="changeImageBtn">
+                                    <i class="fas fa-upload"></i> Change Image
+                                </button>
+                                <button type="button" class="btn secondary small" id="removeImageBtn">
+                                    <i class="fas fa-trash"></i> Remove
+                                </button>
+                                <input type="file" id="lensImageInput" accept="image/*" style="display: none;">
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="minFocalLength">Min Focal Length (for zoom)</label>
-                        <input type="number" id="minFocalLength" placeholder="24">
+                    <!-- Form Tabs -->
+                    <div class="form-tabs">
+                        <button type="button" class="tab-btn active" data-tab="basic">Basic Info</button>
+                        <button type="button" class="tab-btn" data-tab="exif">EXIF Data</button>
+                        <button type="button" class="tab-btn" data-tab="collection">Collection Details</button>
+                        <button type="button" class="tab-btn" data-tab="specs">Specifications</button>
                     </div>
-                    <div class="form-group">
-                        <label for="maxFocalLength">Max Focal Length (for zoom)</label>
-                        <input type="number" id="maxFocalLength" placeholder="70">
-                    </div>
-                </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="minAperture">Minimum Aperture (F-number) *</label>
-                        <input type="number" step="0.1" id="minAperture" required placeholder="1.4">
-                    </div>
-                    <div class="form-group">
-                        <label for="exifLensID">EXIF Lens ID *</label>
-                        <input type="text" id="exifLensID" required placeholder="e.g., Model 1">
-                    </div>
-                </div>
+                    <!-- Basic Info Tab -->
+                    <div class="tab-content active" id="tab-basic">
+                        <input type="hidden" id="lensId">
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Lens Name *</label>
+                                <input type="text" id="lensName" placeholder="e.g., Helios-44 58mm f/2" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Maker *</label>
+                                <input type="text" id="lensMaker" placeholder="e.g., KMZ" required>
+                            </div>
+                        </div>
 
-                <div class="form-group">
-                    <label for="exifLensModel">EXIF Lens Model *</label>
-                    <input type="text" id="exifLensModel" required placeholder="e.g., FE 35mm F1.4 GM">
-                </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Type</label>
+                                <select id="lensType">
+                                    <option value="prime">Prime</option>
+                                    <option value="zoom">Zoom</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Mount</label>
+                                <select id="lensMount">
+                                    <option value="">Select mount</option>
+                                    <option value="Sony E-Mount">Sony E-Mount</option>
+                                    <option value="M42">M42</option>
+                                    <option value="M39 (LTM)">M39 (LTM)</option>
+                                    <option value="Nikon F">Nikon F</option>
+                                    <option value="Canon FD">Canon FD</option>
+                                    <option value="Minolta SR (MD/MC)">Minolta SR (MD/MC)</option>
+                                    <option value="Konica AR">Konica AR</option>
+                                    <option value="Exakta">Exakta</option>
+                                    <option value="Pentax K">Pentax K</option>
+                                    <option value="Leica M">Leica M</option>
+                                </select>
+                            </div>
+                        </div>
 
-                <div class="form-group">
-                    <label for="lensDescription">Description</label>
-                    <textarea id="lensDescription" rows="3" placeholder="Notes about this lens..."></textarea>
-                </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Focal Length</label>
+                                <input type="text" id="lensFocalLength" placeholder="e.g., 58mm">
+                            </div>
+                            <div class="form-group">
+                                <label>Fixed Focal Length (mm)</label>
+                                <input type="number" step="0.1" id="lensFixedFocalLength" placeholder="e.g., 58">
+                            </div>
+                        </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="isManual"> This is a manual/vintage lens
-                        </label>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Aperture</label>
+                                <input type="text" id="lensAperture" placeholder="e.g., F2">
+                            </div>
+                            <div class="form-group">
+                                <label>Min Aperture (f-number)</label>
+                                <input type="number" step="0.1" id="lensMinAperture" placeholder="e.g., 2.0">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label>Description</label>
+                                <textarea id="lensDescription" placeholder="Brief description of this lens..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="lensIsManual"> Manual Focus Lens
+                                </label>
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="isActive" checked> Active (shown in main app)
-                        </label>
-                    </div>
-                </div>
 
-                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
-                    <button type="button" onclick="closeModal()" class="btn btn-secondary">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Lens</button>
+                    <!-- EXIF Data Tab -->
+                    <div class="tab-content" id="tab-exif">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>EXIF Lens ID</label>
+                                <input type="text" id="lensExifLensID" placeholder="e.g., Manual Lens">
+                            </div>
+                            <div class="form-group">
+                                <label>EXIF Lens Model</label>
+                                <input type="text" id="lensExifLensModel" placeholder="e.g., Helios-44 58mm f/2.0">
+                            </div>
+                        </div>
+                        <p class="help-text" style="color: #7f8c8d; font-size: 12px; margin-top: 10px;">
+                            <i class="fas fa-info-circle"></i> These values will be written to the EXIF metadata of processed RAW files.
+                        </p>
+                    </div>
+
+                    <!-- Collection Details Tab -->
+                    <div class="tab-content" id="tab-collection">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Serial Number</label>
+                                <input type="text" id="lensSerialNumber" placeholder="e.g., 12345678">
+                            </div>
+                            <div class="form-group">
+                                <label>Condition</label>
+                                <select id="lensCondition">
+                                    <option value="">Select condition</option>
+                                    <option value="Mint">Mint</option>
+                                    <option value="Excellent">Excellent</option>
+                                    <option value="Good">Good</option>
+                                    <option value="Fair">Fair</option>
+                                    <option value="Poor">Poor</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Manufacture Date</label>
+                                <input type="text" id="lensManufactureDate" placeholder="e.g., 1975">
+                            </div>
+                            <div class="form-group">
+                                <label>Purchase Date</label>
+                                <input type="date" id="lensPurchaseDate">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Purchase Price ($)</label>
+                                <input type="number" step="0.01" id="lensPurchasePrice" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label>Purchase Location</label>
+                                <input type="text" id="lensPurchaseLocation" placeholder="e.g., eBay, Local shop">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label>Notes / Comments</label>
+                                <textarea id="lensNotes" rows="3" placeholder="Personal notes about this lens..."></textarea>
+                            </div>
+                        </div>
+
+                        <div class="status-toggle">
+                            <label>
+                                <input type="checkbox" id="lensIsOwned" checked> Owned
+                            </label>
+                            <label>
+                                <input type="checkbox" id="lensIsWishlist"> Wishlist
+                            </label>
+                            <label>
+                                <input type="checkbox" id="lensIsActive" checked> Active
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Specifications Tab -->
+                    <div class="tab-content" id="tab-specs">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Filter Thread</label>
+                                <input type="text" id="lensFilterThread" placeholder="e.g., 49mm">
+                            </div>
+                            <div class="form-group">
+                                <label>Weight</label>
+                                <input type="text" id="lensWeight" placeholder="e.g., 230g">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Dimensions</label>
+                                <input type="text" id="lensDimensions" placeholder="e.g., 60 x 50mm">
+                            </div>
+                            <div class="form-group">
+                                <label>Hood Model</label>
+                                <input type="text" id="lensHoodModel" placeholder="e.g., Built-in">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Optical Design</label>
+                                <input type="text" id="lensOpticalDesign" placeholder="e.g., 6 elements in 4 groups">
+                            </div>
+                            <div class="form-group">
+                                <label>Min Focus Distance</label>
+                                <input type="text" id="lensMinFocusDistance" placeholder="e.g., 0.5m">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Max Magnification</label>
+                                <input type="text" id="lensMaxMagnification" placeholder="e.g., 0.15x">
+                            </div>
+                            <div class="form-group">
+                                <label>Tags</label>
+                                <input type="text" id="lensTags" placeholder="e.g., vintage, soviet, bokeh">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Empty state when no lens selected -->
+                <div id="noLensSelected" class="empty-state">
+                    <i class="fas fa-lens fa-3x"></i>
+                    <p>Select a lens from the list or create a new one</p>
                 </div>
-            </form>
+            </div>
         </div>
     </div>
 
-    <script src="/lens-manager.js"></script>
-</body>
+    <div id="notification" class="notification" style="display: none;"></div>
 
+    <script src="lens-manager.js"></script>
+</body>
 </html>

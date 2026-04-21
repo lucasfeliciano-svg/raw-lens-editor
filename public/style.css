@@ -4,6 +4,123 @@
     box-sizing: border-box;
 }
 
+/* Form tabs */
+.form-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 25px;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 10px;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    background: none;
+    border: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: #7f8c8d;
+    cursor: pointer;
+    border-radius: 8px 8px 0 0;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    background: #f8f9fa;
+    color: #2c3e50;
+}
+
+.tab-btn.active {
+    background: #667eea;
+    color: white;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Collection summary cards */
+.lens-collection-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 15px;
+    border: 1px solid #e9ecef;
+    transition: all 0.3s;
+}
+
+.lens-collection-card:hover {
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+}
+
+.lens-collection-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 15px;
+}
+
+.lens-collection-image {
+    width: 80px;
+    height: 80px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #f8f9fa;
+}
+
+.lens-collection-info {
+    flex: 1;
+}
+
+.lens-collection-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #2c3e50;
+    margin-bottom: 5px;
+}
+
+.lens-collection-meta {
+    display: flex;
+    gap: 20px;
+    color: #7f8c8d;
+    font-size: 13px;
+}
+
+.lens-collection-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
+    padding-top: 15px;
+    border-top: 1px solid #e9ecef;
+}
+
+.collection-detail-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.collection-detail-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #95a5a6;
+    letter-spacing: 0.5px;
+}
+
+.collection-detail-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+/* Report button */
+.btn-outline i.fa-file-pdf {
+    color: #e74c3c;
+}
+
 /* Fix left panel width */
 .left-panel {
     flex: 0 0 450px;
@@ -19,10 +136,12 @@
 .right-panel {
     flex: 1;
     min-width: 0;
-    padding: 30px;
+    padding: 20px 30px;
     background: white;
     display: flex;
     flex-direction: column;
+    max-height: none;
+    overflow-y: auto;
 }
 
 /* Preview grid stays inside right panel */
@@ -32,8 +151,10 @@
     gap: 20px;
     flex: 1;
     overflow-y: auto;
+    padding-bottom: 20px;
+    min-height: 600px; /* Ensure minimum height */
+    max-height: none;
 }
-
 
 /* For smaller screens */
 @media (max-width: 900px) {
@@ -61,6 +182,9 @@ body {
 .container {
     max-width: 100%;
     overflow-x: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 header {
@@ -88,9 +212,11 @@ header h1 {
 .main-content {
     display: flex !important;
     flex-direction: row !important;
-    align-items: flex-start !important;
-    min-height: 800px;
+    align-items: stretch !important;
+    flex: 1;
+    min-height: 0;
     width: 100%;
+    overflow: hidden;
 }
 
 /* Left panel - fixed width */
@@ -102,7 +228,7 @@ header h1 {
     background: #f8f9fa;
     border-right: 1px solid #e9ecef;
     overflow-y: auto;
-    float: none !important;
+    height: 100%;
 }
 
 /* Right panel - takes remaining space */
@@ -318,7 +444,8 @@ header h1 {
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    /* This ensures content stacks vertically */
+    height: fit-content;
+    max-height: 350px;
 }
 
 .photo-card:hover {
@@ -331,18 +458,19 @@ header h1 {
 }
 
 .photo-preview {
-    height: 200px;
+    height: 180px; /* Slightly taller preview */
     overflow: hidden;
     position: relative;
     flex-shrink: 0;
-    /* Prevent preview from shrinking */
+    background: #f8f9fa;
 }
 
+/* Apply EXIF orientation via CSS */
 .photo-preview img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    transition: transform 0.3s ease;
+    image-orientation: from-image; /* This reads EXIF orientation */
 }
 
 .photo-card:hover .photo-preview img {
@@ -365,11 +493,11 @@ header h1 {
 }
 
 .photo-info {
-    padding: 15px;
+    padding: 12px;
     flex-grow: 1;
-    /* Allow info to take remaining space */
     display: flex;
     flex-direction: column;
+    background: white;
 }
 
 .photo-name {
@@ -414,10 +542,72 @@ header h1 {
     font-size: 14px;
 }
 
+/* File progress list */
+.file-progress-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.file-name {
+    font-size: 13px;
+    color: #2c3e50;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 70%;
+}
+
+.file-status {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 20px;
+    background: #f8f9fa;
+    transition: color 0.2s;
+}
+
+.file-list-progress {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-top: 15px;
+    padding-right: 5px;
+}
+
+/* Upload progress section */
+.upload-progress-section {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+    border: 2px solid #e9ecef;
+}
+
+.upload-progress-section h3 {
+    margin-bottom: 15px;
+    color: #2c3e50;
+    font-size: 1.1em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.progress-text {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #2c3e50;
+    font-weight: 500;
+}
+
 .empty-state {
     grid-column: 1 / -1;
     text-align: center;
-    padding: 80px 20px;
+    padding: 100px 20px;
     color: #bdc3c7;
 }
 
@@ -426,10 +616,11 @@ header h1 {
 }
 
 .processing-section {
-    margin-top: 30px;
-    padding: 25px;
+    margin-bottom: 20px;
+    padding: 20px;
     background: #f8f9fa;
     border-radius: 15px;
+    flex-shrink: 0;
 }
 
 .progress-bar {
@@ -1982,4 +2173,49 @@ input:checked+.toggle-slider:before {
 .preview-status.failed {
     background: #e74c3c;
     color: white;
+}
+
+/* Selection Bar Lens Selector */
+.selection-lens-selector {
+    min-width: 220px;
+    margin: 0 10px;
+}
+
+.lens-select {
+    width: 100%;
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+}
+
+.lens-select option {
+    background: #2c3e50;
+    color: white;
+    padding: 8px;
+}
+
+.lens-select:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+}
+
+.lens-select:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Output folder display */
+#outputFolderDisplay {
+    font-family: monospace;
+    background: #f0f4ff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    margin-top: 4px;
+    word-break: break-all;
 }

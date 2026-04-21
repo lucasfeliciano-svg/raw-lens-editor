@@ -4,6 +4,8 @@ const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
 const http = require('http');
+const { ipcMain, dialog } = require('electron');
+
 
 
 
@@ -22,7 +24,7 @@ const getBackendPath = () => {
             path.join(__dirname, 'server.js'),
             path.join(process.cwd(), 'server.js')
         ];
-        
+
         for (const p of possiblePaths) {
             if (fs.existsSync(p)) {
                 console.log(`Found backend at: ${p}`);
@@ -33,17 +35,47 @@ const getBackendPath = () => {
     }
 };
 
+// Check if ExifTool is installed
+const checkExifTool = () => {
+    const { execSync } = require('child_process');
+    const exiftoolPaths = [
+        '/opt/homebrew/bin/exiftool',  // Apple Silicon Mac
+        '/usr/local/bin/exiftool',      // Intel Mac
+        '/usr/bin/exiftool',
+        '/bin/exiftool'
+    ];
+
+    // First check known paths
+    for (const p of exiftoolPaths) {
+        if (fs.existsSync(p)) {
+            console.log(`✓ ExifTool found at: ${p}`);
+            return true;
+        }
+    }
+
+    // Then try PATH
+    try {
+        execSync('which exiftool', { stdio: 'pipe' });
+        console.log('✓ ExifTool found in PATH');
+        return true;
+    } catch (e) {
+        // Not found
+    }
+
+    return false;
+};
+
 const startBackend = () => {
     return new Promise((resolve, reject) => {
         const serverPath = getBackendPath();
         console.log('Starting backend from:', serverPath);
-        
+
         if (!fs.existsSync(serverPath)) {
             console.error('Server.js not found at:', serverPath);
             reject(new Error(`Server.js not found at: ${serverPath}`));
             return;
         }
-        
+
         // Set up data directories in user's home folder
         const userDataPath = app.getPath('userData');
         const uploadsDir = path.join(userDataPath, 'uploads');
@@ -51,7 +83,7 @@ const startBackend = () => {
         const downloadsDir = path.join(userDataPath, 'downloads');
         const processedDir = path.join(userDataPath, 'processed');
         const lensImagesDir = path.join(userDataPath, 'lens-images');
-        
+
         // Create directories if they don't exist
         [uploadsDir, previewsDir, downloadsDir, processedDir, lensImagesDir].forEach(dir => {
             if (!fs.existsSync(dir)) {
@@ -59,7 +91,7 @@ const startBackend = () => {
                 console.log(`Created directory: ${dir}`);
             }
         });
-        
+
         // Set environment variables for the backend
         const env = {
             ...process.env,
@@ -73,7 +105,7 @@ const startBackend = () => {
             LENS_IMAGES_DIR: lensImagesDir,
             PORT: '3000'
         };
-        
+
         // Use fork with electron as the interpreter
         backendProcess = fork(serverPath, [], {
             execPath: process.execPath,
@@ -82,9 +114,9 @@ const startBackend = () => {
             detached: false,
             silent: false
         });
-        
+
         let backendReady = false;
-        
+
         backendProcess.stdout.on('data', (data) => {
             const output = data.toString();
             console.log(`[Backend]: ${output}`);
@@ -96,21 +128,21 @@ const startBackend = () => {
                 }
             }
         });
-        
+
         backendProcess.stderr.on('data', (data) => {
             console.error(`[Backend Error]: ${data}`);
         });
-        
+
         backendProcess.on('error', (err) => {
             console.error('Failed to start backend:', err);
             reject(err);
         });
-        
+
         backendProcess.on('exit', (code, signal) => {
             console.log(`Backend exited with code ${code}, signal ${signal}`);
             backendProcess = null;
         });
-        
+
         // Timeout after 10 seconds
         setTimeout(() => {
             if (!backendReady) {
@@ -136,7 +168,7 @@ const resolveAppPath = (filePath) => {
     // In production, the file might be in asar
     const asarPath = path.join(process.resourcesPath, 'app.asar', filePath);
     const normalPath = path.join(__dirname, filePath);
-    
+
     if (fs.existsSync(asarPath)) {
         return asarPath;
     }
@@ -219,7 +251,7 @@ const createWindow = () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
         return;
     }
-    
+
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -234,7 +266,7 @@ const createWindow = () => {
         backgroundColor: '#f8f9fa',
         title: 'Sony Lens Manager'
     });
-    
+
     // Show loading screen
     mainWindow.loadURL(`data:text/html,
         <!DOCTYPE html>
@@ -296,13 +328,13 @@ const createWindow = () => {
         </body>
         </html>
     `).catch(err => console.error('Failed to load loading screen:', err));
-    
+
     mainWindow.show();
-    
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
-    
+
     // Open DevTools in development
     if (process.env.NODE_ENV === 'development') {
         mainWindow.webContents.openDevTools();
@@ -329,6 +361,18 @@ app.whenReady().then(async () => {
     console.log('App ready, creating window...');
     createWindow();
     
+    // Check for ExifTool
+    if (!checkExifTool()) {
+        showErrorPage(`
+            ExifTool is not installed on your system.<br><br>
+            <strong>Please install ExifTool:</strong><br>
+            • macOS: <code>brew install exiftool</code><br>
+            • Windows: Download from <a href="https://exiftool.org/" style="color: #667eea;">exiftool.org</a><br>
+            • Linux: <code>sudo apt install libimage-exiftool-perl</code>
+        `);
+        return;
+    }
+    
     console.log('Starting backend...');
     try {
         await startBackend();
@@ -339,6 +383,19 @@ app.whenReady().then(async () => {
         showErrorPage(err.message);
     }
 });
+
+ipcMain.handle('select-folder', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory', 'createDirectory'],
+        title: 'Select Output Folder for Processed Photos'
+    });
+    
+    if (!result.canceled && result.filePaths.length > 0) {
+        return result.filePaths[0];
+    }
+    return null;
+});
+
 
 app.on('window-all-closed', () => {
     stopBackend();

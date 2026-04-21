@@ -8,6 +8,7 @@ class LensManager {
         this.lastSelectedIndex = -1;
         this.isDragging = false;
         this.dragStartIndex = -1;
+        this.outputDir = '';
 
         this.init();
     }
@@ -15,10 +16,13 @@ class LensManager {
     async init() {
         console.log('Initializing Sony Lens Manager...');
         this.bindEvents();
+
+        // Load lenses FIRST, then populate dropdown
         await this.loadLenses();
         this.renderLenses();
+        this.populateSelectionBarLenses(); // Explicit call after lenses loaded
 
-        // Clean up temporary files on page load
+        await this.loadOutputDirectory();
         await this.cleanupTempFiles();
 
         this.showNotification('Application ready. Shift+click to select multiple photos!', 'success');
@@ -30,7 +34,7 @@ class LensManager {
         // Listen for messages from the lens manager iframe
         window.addEventListener('message', (event) => {
             if (event.data.type === 'LENSES_UPDATED') {
-                console.log('Lenses updated in modal, refreshing main page...');
+                console.log('Lenses updated, refreshing...');
                 this.refreshLenses();
             } else if (event.data.type === 'CLOSE_LENS_MANAGER') {
                 this.closeLensManagerModal();
@@ -38,11 +42,10 @@ class LensManager {
         });
     }
 
-    // Add this method to refresh lenses
-    // Add refreshLenses method (for modal close)
     async refreshLenses() {
         await this.loadLenses();
         this.renderLenses();
+        this.populateSelectionBarLenses(); // Re-populate dropdown
     }
 
     async cleanupTempFiles() {
@@ -54,6 +57,131 @@ class LensManager {
             }
         } catch (error) {
             console.error('Failed to cleanup temp files:', error);
+        }
+    }
+    async getHomeDirectory() {
+        if (window.electronAPI?.getHomeDir) {
+            try {
+                const homeDir = await window.electronAPI.getHomeDir();
+                return homeDir;
+            } catch (error) {
+                console.warn('Could not get home directory:', error);
+                return '';
+            }
+        }
+        return '';
+    }
+
+    async loadOutputDirectory() {
+        try {
+            const response = await fetch('/api/output-dir');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const result = await response.json();
+            this.outputDir = result.outputDir;
+        } catch (error) {
+            console.warn('Could not load output directory, using default:', error.message);
+            this.outputDir = '';
+        } finally {
+            await this.updateOutputFolderDisplay();
+        }
+    }
+
+    async updateOutputFolderDisplay() {
+        const display = document.getElementById('outputFolderDisplay');
+        if (!display) return;
+
+        const homeDir = await this.getHomeDirectory();
+
+        if (this.outputDir) {
+            if (homeDir && this.outputDir.startsWith(homeDir)) {
+                display.textContent = '~' + this.outputDir.substring(homeDir.length);
+            } else {
+                display.textContent = this.outputDir;
+            }
+        } else {
+            const defaultPath = homeDir ? `${homeDir}/Downloads/SonyLensManager` : '~/Downloads/SonyLensManager';
+            if (homeDir && defaultPath.startsWith(homeDir)) {
+                display.textContent = '~' + defaultPath.substring(homeDir.length);
+            } else {
+                display.textContent = defaultPath;
+            }
+        }
+    }
+
+    async selectOutputFolder() {
+        // For Electron, we can use the electronAPI to open a folder dialog
+        if (window.electronAPI && window.electronAPI.selectFolder) {
+            const folder = await window.electronAPI.selectFolder();
+            if (folder) {
+                await this.setOutputDirectory(folder);
+            }
+        } else {
+            // Fallback for browser testing
+            const folder = prompt('Enter output directory path:', this.outputDir);
+            if (folder) {
+                await this.setOutputDirectory(folder);
+            }
+        }
+    }
+
+    async setOutputDirectory(dir) {
+        try {
+            const response = await fetch('/api/set-output-dir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ outputDir: dir })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                this.outputDir = result.outputDir;
+                this.updateOutputFolderDisplay();
+                this.showNotification(`Output folder set to: ${dir}`, 'success');
+            }
+        } catch (error) {
+            this.showNotification('Failed to set output folder', 'error');
+        }
+    }
+    // Add method to populate selection bar dropdown:
+    populateSelectionBarLenses() {
+        const select = document.getElementById('selectionLensSelect');
+        if (!select) {
+            console.error('selectionLensSelect element NOT FOUND in DOM');
+            return;
+        }
+
+        console.log(`Populating dropdown with ${this.lenses.length} lenses`);
+
+        // Clear existing options
+        select.innerHTML = '<option value="">-- Select Lens --</option>';
+
+        // Add lenses
+        this.lenses.forEach(lens => {
+            const option = document.createElement('option');
+            option.value = lens.id;
+            option.textContent = `${lens.name} (${lens.focalLength || 'Unknown'})`;
+            select.appendChild(option);
+        });
+
+        // Sync with currently selected lens
+        if (this.selectedLens) {
+            select.value = this.selectedLens;
+        }
+
+        console.log('Dropdown populated with options:', select.options.length);
+    }
+
+
+    // Update when a lens is selected in main panel:
+    selectLens(lensId) {
+        this.selectedLens = lensId;
+        this.renderLenses();
+        this.updateApplyButton();
+
+        // Sync dropdown
+        const select = document.getElementById('selectionLensSelect');
+        if (select) {
+            select.value = lensId;
         }
     }
 
@@ -84,12 +212,48 @@ class LensManager {
         });
         document.getElementById('removeSelectedBtn')?.addEventListener('click', () => this.removeSelected());
 
+        document.getElementById('selectOutputFolderBtn')?.addEventListener('click', () => this.selectOutputFolder());
+
         fileInput.addEventListener('change', async (e) => {
             if (e.target.files.length) {
                 await this.uploadFiles(e.target.files);
                 fileInput.value = '';
             }
         });
+
+        const selectionLensSelect = document.getElementById('selectionLensSelect');
+        if (selectionLensSelect) {
+            selectionLensSelect.addEventListener('change', (e) => {
+                const lensId = e.target.value;
+                if (lensId) {
+                    // Update the selected lens in the class
+                    this.selectedLens = lensId;
+
+                    // Re-render left panel to highlight the correct card
+                    this.renderLenses();
+
+                    // Update apply buttons
+                    this.updateApplyButton();
+
+                    const applyBtn = document.getElementById('applyToSelectedBtn');
+                    if (applyBtn) {
+                        applyBtn.disabled = this.selectedFiles.size === 0;
+                    }
+
+                    console.log(`Lens selected from dropdown: ${lensId}`);
+                } else {
+                    // No lens selected
+                    this.selectedLens = null;
+                    this.renderLenses();
+                    this.updateApplyButton();
+
+                    const applyBtn = document.getElementById('applyToSelectedBtn');
+                    if (applyBtn) {
+                        applyBtn.disabled = true;
+                    }
+                }
+            });
+        }
 
 
 
@@ -186,134 +350,287 @@ class LensManager {
     }
 
     async uploadFiles(files) {
-        const allowedTypes = ['.arw', '.ARW', '.jpg', '.jpeg', '.JPEG', '.JPG'];
-        const validFiles = Array.from(files).filter(file => {
-            const ext = '.' + file.name.split('.').pop().toLowerCase();
-            return allowedTypes.includes(ext);
-        });
+    const allowedTypes = ['.arw', '.ARW', '.jpg', '.jpeg', '.JPEG', '.JPG'];
+    const validFiles = Array.from(files).filter(file => {
+        const ext = '.' + file.name.split('.').pop().toLowerCase();
+        return allowedTypes.includes(ext);
+    });
 
-        if (validFiles.length === 0) {
-            this.showNotification('No valid files selected. Please upload Sony RAW (.arw) files.', 'error');
-            return;
-        }
+    if (validFiles.length === 0) {
+        this.showNotification('No valid files selected. Please upload Sony RAW (.arw) files.', 'error');
+        return;
+    }
 
-        // Show progress section
-        const progressSection = document.getElementById('uploadProgressSection');
-        const progressFill = document.getElementById('uploadProgressFill');
-        const progressText = document.getElementById('uploadProgressText');
-        const fileListContainer = document.getElementById('uploadFileList');
+    // Show progress section
+    const progressSection = document.getElementById('uploadProgressSection');
+    const progressFill = document.getElementById('uploadProgressFill');
+    const progressText = document.getElementById('uploadProgressText');
+    const fileListContainer = document.getElementById('uploadFileList');
 
-        progressSection.style.display = 'block';
-        progressFill.style.width = '0%';
-        progressText.textContent = `Uploading ${validFiles.length} file(s)...`;
+    progressSection.style.display = 'block';
+    progressFill.style.width = '0%';
+    progressText.textContent = `Uploading ${validFiles.length} file(s) in parallel...`;
 
-        // Create file list with pending status
-        const fileStatuses = validFiles.map(file => ({
-            name: file.name,
-            status: 'pending',
-            uploadStatus: 'pending',
-            previewStatus: 'pending',
-            fileInfo: null,
-            error: null
-        }));
-
-        fileListContainer.innerHTML = fileStatuses.map((fs, idx) => `
+    // Create file list
+    fileListContainer.innerHTML = validFiles.map((file, idx) => `
         <div class="file-progress-item" data-index="${idx}">
-            <span class="file-name">${this.escapeHtml(fs.name)}</span>
-            <div class="file-status-container">
-                <span class="file-status upload-status pending">⏳ Upload</span>
-                <span class="file-status preview-status pending">🖼️ Preview</span>
-            </div>
+            <span class="file-name">${this.escapeHtml(file.name)}</span>
+            <span class="file-status" id="fileStatus-${idx}">⏳ Pending</span>
         </div>
     `).join('');
 
-        // Upload all files in parallel with Promise.all
-        const uploadPromises = validFiles.map(async (file, idx) => {
-            // Update status to uploading
-            this.updateUploadStatus(idx, 'uploading', 'upload');
+    let completedUploads = 0;
+    const totalFiles = validFiles.length;
 
-            const formData = new FormData();
-            formData.append('photos', file);
+    // Function to update a single file's status
+    const updateFileStatus = (idx, status, text, color) => {
+        const statusEl = document.getElementById(`fileStatus-${idx}`);
+        if (statusEl) {
+            statusEl.textContent = text;
+            statusEl.style.color = color;
+        }
+    };
 
-            try {
-                const response = await fetch('/api/upload-single', {
-                    method: 'POST',
-                    body: formData
-                });
+    // Function to update overall progress
+    const updateOverallProgress = () => {
+        completedUploads++;
+        const percent = Math.round((completedUploads / totalFiles) * 100);
+        progressFill.style.width = `${percent}%`;
+        progressText.textContent = `Uploading: ${completedUploads}/${totalFiles} files (${percent}%)`;
+    };
 
-                const result = await response.json();
+    // Create upload promises for ALL files (parallel execution)
+    const uploadPromises = validFiles.map(async (file, idx) => {
+        // Update status to uploading
+        updateFileStatus(idx, 'uploading', '⬆️ Uploading...', '#3498db');
+        
+        const formData = new FormData();
+        formData.append('photos', file);
 
-                if (result.success) {
-                    fileStatuses[idx].status = 'uploaded';
-                    fileStatuses[idx].uploadStatus = 'completed';
-                    fileStatuses[idx].fileInfo = result.file;
-                    this.updateUploadStatus(idx, 'completed', 'upload');
-                    return { success: true, fileInfo: result.file, index: idx };
-                } else {
-                    throw new Error(result.error || 'Upload failed');
-                }
-            } catch (error) {
-                fileStatuses[idx].status = 'failed';
-                fileStatuses[idx].uploadStatus = 'failed';
-                fileStatuses[idx].error = error.message;
-                this.updateUploadStatus(idx, 'failed', 'upload');
-                return { success: false, error: error.message, index: idx };
+        try {
+            const response = await fetch('/api/upload-single', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                updateFileStatus(idx, 'completed', '✅ Uploaded', '#27ae60');
+                updateOverallProgress();
+                
+                const fileInfo = result.file;
+                fileInfo.preview = null;
+                fileInfo.previewStatus = 'pending';
+                
+                return { success: true, fileInfo, index: idx };
+            } else {
+                throw new Error(result.error || 'Upload failed');
             }
-        });
+        } catch (error) {
+            updateFileStatus(idx, 'failed', '❌ Failed', '#e74c3c');
+            updateOverallProgress();
+            return { success: false, error: error.message, index: idx };
+        }
+    });
 
-        // Wait for all uploads to complete
-        const uploadResults = await Promise.all(uploadPromises);
-        const successfulUploads = uploadResults.filter(r => r.success);
-        const failedUploads = uploadResults.filter(r => !r.success);
+    // Wait for ALL uploads to complete in parallel
+    const uploadResults = await Promise.all(uploadPromises);
+    
+    const successfulUploads = uploadResults.filter(r => r.success);
+    const failedUploads = uploadResults.filter(r => !r.success);
 
-        // Update progress bar to show uploads complete
-        progressFill.style.width = '100%';
-        progressText.textContent = `Upload complete! ${successfulUploads.length} of ${validFiles.length} files uploaded. Generating previews...`;
+    // Add uploaded files to the grid immediately
+    const newFiles = successfulUploads.map(r => r.fileInfo);
+    this.uploadedFiles = [...this.uploadedFiles, ...newFiles];
+    this.renderPreviews();
+    this.updateFileCount();
 
-        // Add successfully uploaded files to the list immediately
-        const newFiles = successfulUploads.map(r => r.fileInfo);
-        this.uploadedFiles = [...this.uploadedFiles, ...newFiles];
-        this.renderPreviews();
-        this.updateFileCount();
+    progressFill.style.width = '100%';
+    progressText.textContent = `✓ ${successfulUploads.length} files uploaded!`;
+    
+    if (failedUploads.length > 0) {
+        this.showNotification(`${successfulUploads.length} uploaded, ${failedUploads.length} failed`, 'error');
+    } else {
+        this.showNotification(`${successfulUploads.length} files uploaded successfully!`, 'success');
+    }
 
-        // Start parallel preview generation for uploaded files
-        if (successfulUploads.length > 0) {
-            this.generatePreviewsInParallel(successfulUploads, fileStatuses, fileListContainer, progressText, progressFill);
-        } else {
-            // No files uploaded successfully
-            setTimeout(() => {
-                progressSection.style.display = 'none';
-                this.showNotification(`Upload failed: ${failedUploads.length} files failed`, 'error');
-            }, 3000);
+    // Hide progress section after delay
+    setTimeout(() => {
+        progressSection.style.display = 'none';
+    }, 2000);
+
+    // Start background preview generation
+    if (successfulUploads.length > 0) {
+        this.generatePreviewsInBackground(successfulUploads.map(r => r.fileInfo));
+    }
+}
+
+    // Helper: Update single file status in progress list
+    updateFileStatus(index, status, text) {
+        const container = document.getElementById('uploadFileList');
+        if (!container) return;
+
+        const item = container.querySelector(`.file-progress-item[data-index="${index}"]`);
+        if (item) {
+            const statusSpan = item.querySelector('.file-status');
+            if (statusSpan) {
+                statusSpan.className = `file-status upload-status ${status}`;
+                statusSpan.textContent = text;
+            }
         }
     }
 
-    async generatePreviewsInParallel(successfulUploads, fileStatuses, fileListContainer, progressText, progressFill) {
-    const totalPreviews = successfulUploads.length;
-    let completedPreviews = 0;
-    
-    // CONFIGURATION: Change this number to control parallel previews
-    const MAX_CONCURRENT_PREVIEWS = 60; // Increase this value (e.g., 20, 30, 50)
-    
-    // Update status text
-    progressText.textContent = `Generating previews for ${totalPreviews} files (${MAX_CONCURRENT_PREVIEWS} at a time)...`;
-    progressFill.style.width = '0%';
-    
-    // Process previews with concurrency limit
-    const results = [];
-    const queue = [...successfulUploads];
-    
-    async function processBatch() {
-        const batch = queue.splice(0, MAX_CONCURRENT_PREVIEWS);
-        if (batch.length === 0) return;
-        
-        const batchPromises = batch.map(async (upload) => {
+    // PHASE 2: Background preview generation (doesn't block UI)
+    async generatePreviewsInBackground(files) {
+        console.log(`Starting background preview generation for ${files.length} files...`);
+
+        // Show a subtle indicator that previews are generating
+        this.showPreviewGeneratingIndicator(files.length);
+
+        // Process previews with concurrency for speed
+        const CONCURRENT_PREVIEWS = 4; // Adjust based on your system
+
+        const queue = [...files];
+        let completed = 0;
+
+        const processNext = async () => {
+            if (queue.length === 0) return;
+
+            const batch = queue.splice(0, CONCURRENT_PREVIEWS);
+            const promises = batch.map(async (fileInfo) => {
+                try {
+                    const response = await fetch('/api/generate-preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filename: fileInfo.uploadedName })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // Update the file in the array
+                        const index = this.uploadedFiles.findIndex(f => f.uploadedName === fileInfo.uploadedName);
+                        if (index !== -1) {
+                            this.uploadedFiles[index].preview = result.preview;
+                            this.uploadedFiles[index].largePreview = result.largePreview;
+                            this.uploadedFiles[index].previewStatus = 'ready';
+
+                            // Update just this card in the UI
+                            this.updateSinglePreviewCard(index);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Preview failed for ${fileInfo.originalName}:`, error);
+                }
+
+                completed++;
+                this.updatePreviewProgress(completed, files.length);
+            });
+
+            await Promise.all(promises);
+
+            // Process next batch
+            if (queue.length > 0) {
+                await processNext();
+            }
+        };
+
+        await processNext();
+
+        // All previews generated
+        this.hidePreviewGeneratingIndicator();
+        this.showNotification(`All ${files.length} previews ready!`, 'success');
+        console.log('Background preview generation complete');
+    }
+
+    // Show subtle preview generation indicator
+    showPreviewGeneratingIndicator(total) {
+        let indicator = document.getElementById('previewGeneratingIndicator');
+
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'previewGeneratingIndicator';
+            indicator.style.cssText = `
+            position: fixed;
+            bottom: 80px;
+            right: 30px;
+            background: rgba(44, 62, 80, 0.95);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 30px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+        `;
+            document.body.appendChild(indicator);
+        }
+
+        indicator.innerHTML = `
+        <i class="fas fa-sync fa-spin"></i>
+        <span>Generating previews: <span id="previewProgressCount">0</span>/${total}</span>
+    `;
+    }
+
+    updatePreviewProgress(completed, total) {
+        const countSpan = document.getElementById('previewProgressCount');
+        if (countSpan) {
+            countSpan.textContent = completed;
+        }
+    }
+
+    hidePreviewGeneratingIndicator() {
+        const indicator = document.getElementById('previewGeneratingIndicator');
+        if (indicator) {
+            indicator.style.transition = 'opacity 0.3s';
+            indicator.style.opacity = '0';
+            setTimeout(() => indicator.remove(), 300);
+        }
+    }
+
+    // Update a single card's preview image
+    updateSinglePreviewCard(index) {
+        const card = document.querySelector(`.photo-card[data-index="${index}"]`);
+        if (!card) return;
+
+        const file = this.uploadedFiles[index];
+        if (!file || !file.preview) return;
+
+        const img = card.querySelector('.photo-preview img');
+        if (img) {
+            // Fade in the new image
+            img.style.opacity = '0';
+            img.src = file.preview;
+
+            img.onload = () => {
+                img.style.transition = 'opacity 0.3s';
+                img.style.opacity = '1';
+            };
+        }
+
+        // Remove placeholder styling
+        const previewDiv = card.querySelector('.photo-preview');
+        if (previewDiv) {
+            previewDiv.classList.remove('preview-loading');
+        }
+    }
+
+    // New helper method for preview progress
+    async generatePreviewsWithProgress(successfulUploads, fileStatuses, totalFiles, progressFill, progressText) {
+        let completedPreviews = 0;
+        const previewStartPercent = 50; // Start at 50%
+
+        for (const upload of successfulUploads) {
             const fileInfo = upload.fileInfo;
             const originalIndex = upload.index;
-            
+
             // Update status to generating preview
             this.updateUploadStatus(originalIndex, 'processing', 'preview');
-            
+
             try {
                 const response = await fetch('/api/generate-preview', {
                     method: 'POST',
@@ -323,77 +640,150 @@ class LensManager {
                         originalName: fileInfo.originalName
                     })
                 });
-                
+
                 const result = await response.json();
-                
+
                 if (result.success) {
                     // Update the file info with preview URLs
                     fileInfo.preview = result.preview;
                     fileInfo.largePreview = result.largePreview;
-                    
+
                     // Update the file in the uploadedFiles array
                     const fileIndex = this.uploadedFiles.findIndex(f => f.uploadedName === fileInfo.uploadedName);
                     if (fileIndex !== -1) {
                         this.uploadedFiles[fileIndex].preview = result.preview;
                         this.uploadedFiles[fileIndex].largePreview = result.largePreview;
                     }
-                    
+
                     fileStatuses[originalIndex].previewStatus = 'completed';
                     this.updateUploadStatus(originalIndex, 'completed', 'preview');
-                    
-                    completedPreviews++;
-                    const percent = (completedPreviews / totalPreviews) * 100;
-                    progressFill.style.width = `${percent}%`;
-                    progressText.textContent = `Generating previews: ${completedPreviews}/${totalPreviews} (${MAX_CONCURRENT_PREVIEWS} parallel)...`;
-                    
-                    // Re-render the specific photo card to show preview
                     this.updateSinglePreview(fileIndex);
-                    
-                    return { success: true, index: originalIndex };
                 } else {
                     throw new Error(result.error || 'Preview generation failed');
                 }
             } catch (error) {
-                console.error(`Preview failed for ${fileInfo.originalName}:`, error);
+                console.error(`Preview failed:`, error);
                 fileStatuses[originalIndex].previewStatus = 'failed';
                 this.updateUploadStatus(originalIndex, 'failed', 'preview');
-                return { success: false, error: error.message, index: originalIndex };
             }
-        });
-        
-        const batchResults = await Promise.all(batchPromises);
-        results.push(...batchResults);
-        
-        // Process next batch
-        if (queue.length > 0) {
-            await processBatch.call(this);
+
+            // Update preview progress (50-100%)
+            completedPreviews++;
+            const previewPercent = previewStartPercent + ((completedPreviews / successfulUploads.length) * 50);
+            progressFill.style.width = `${previewPercent}%`;
+            progressText.textContent = `Generating previews: ${completedPreviews}/${successfulUploads.length} (${Math.round(previewPercent)}%)`;
+        }
+
+        // Final re-render to ensure all previews are shown
+        this.renderPreviews();
+    }
+
+    async generatePreviewsInParallel(successfulUploads, fileStatuses, fileListContainer, progressText, progressFill) {
+        const totalPreviews = successfulUploads.length;
+        let completedPreviews = 0;
+
+        // CONFIGURATION: Change this number to control parallel previews
+        const MAX_CONCURRENT_PREVIEWS = 60; // Increase this value (e.g., 20, 30, 50)
+
+        // Update status text
+        progressText.textContent = `Generating previews for ${totalPreviews} files (${MAX_CONCURRENT_PREVIEWS} at a time)...`;
+        progressFill.style.width = '0%';
+
+        // Process previews with concurrency limit
+        const results = [];
+        const queue = [...successfulUploads];
+
+        async function processBatch() {
+            const batch = queue.splice(0, MAX_CONCURRENT_PREVIEWS);
+            if (batch.length === 0) return;
+
+            const batchPromises = batch.map(async (upload) => {
+                const fileInfo = upload.fileInfo;
+                const originalIndex = upload.index;
+
+                // Update status to generating preview
+                this.updateUploadStatus(originalIndex, 'processing', 'preview');
+
+                try {
+                    const response = await fetch('/api/generate-preview', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            filename: fileInfo.uploadedName,
+                            originalName: fileInfo.originalName
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        // Update the file info with preview URLs
+                        fileInfo.preview = result.preview;
+                        fileInfo.largePreview = result.largePreview;
+
+                        // Update the file in the uploadedFiles array
+                        const fileIndex = this.uploadedFiles.findIndex(f => f.uploadedName === fileInfo.uploadedName);
+                        if (fileIndex !== -1) {
+                            this.uploadedFiles[fileIndex].preview = result.preview;
+                            this.uploadedFiles[fileIndex].largePreview = result.largePreview;
+                        }
+
+                        fileStatuses[originalIndex].previewStatus = 'completed';
+                        this.updateUploadStatus(originalIndex, 'completed', 'preview');
+
+                        completedPreviews++;
+                        const percent = (completedPreviews / totalPreviews) * 100;
+                        progressFill.style.width = `${percent}%`;
+                        progressText.textContent = `Generating previews: ${completedPreviews}/${totalPreviews} (${MAX_CONCURRENT_PREVIEWS} parallel)...`;
+
+                        // Re-render the specific photo card to show preview
+                        this.updateSinglePreview(fileIndex);
+
+                        return { success: true, index: originalIndex };
+                    } else {
+                        throw new Error(result.error || 'Preview generation failed');
+                    }
+                } catch (error) {
+                    console.error(`Preview failed for ${fileInfo.originalName}:`, error);
+                    fileStatuses[originalIndex].previewStatus = 'failed';
+                    this.updateUploadStatus(originalIndex, 'failed', 'preview');
+                    return { success: false, error: error.message, index: originalIndex };
+                }
+            });
+
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
+
+            // Process next batch
+            if (queue.length > 0) {
+                await processBatch.call(this);
+            }
+        }
+
+        // Start processing batches
+        await processBatch.call(this);
+
+        // Final update
+        progressFill.style.width = '100%';
+        const successfulPreviews = results.filter(r => r.success);
+        progressText.textContent = `Complete! ${successfulUploads.length} files uploaded, ${successfulPreviews.length} previews generated.`;
+
+        // Final re-render to ensure all previews are shown
+        this.renderPreviews();
+
+        // Hide progress section after delay
+        setTimeout(() => {
+            const progressSection = document.getElementById('uploadProgressSection');
+            if (progressSection) {
+                progressSection.style.display = 'none';
+            }
+        }, 3000);
+
+        const failedPreviews = results.filter(r => !r.success);
+        if (failedPreviews.length > 0) {
+            console.warn(`${failedPreviews.length} previews failed to generate`);
         }
     }
-    
-    // Start processing batches
-    await processBatch.call(this);
-    
-    // Final update
-    progressFill.style.width = '100%';
-    const successfulPreviews = results.filter(r => r.success);
-    progressText.textContent = `Complete! ${successfulUploads.length} files uploaded, ${successfulPreviews.length} previews generated.`;
-    
-    // Final re-render to ensure all previews are shown
-    this.renderPreviews();
-    
-    // Hide progress section after delay
-    setTimeout(() => {
-        const progressSection = document.getElementById('uploadProgressSection');
-        if (progressSection) {
-            progressSection.style.display = 'none';
-        }
-    }, 3000);
-    
-    const failedPreviews = results.filter(r => !r.success);
-    if (failedPreviews.length > 0) {
-        console.warn(`${failedPreviews.length} previews failed to generate`);
-    }
-}
     updateUploadStatus(index, status, type) {
         const container = document.getElementById('uploadFileList');
         if (!container) return;
@@ -522,76 +912,45 @@ class LensManager {
 
         if (this.uploadedFiles.length === 0) {
             previewGrid.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-images fa-3x"></i>
-                    <p>No photos uploaded yet</p>
-                    <p>Upload Sony RAW (.arw) files to get started</p>
-                    <p class="upload-hint">Shift+click to select multiple photos</p>
-                </div>
-            `;
+            <div class="empty-state">
+                <i class="fas fa-images fa-3x"></i>
+                <p>No photos uploaded yet</p>
+                <p>Upload Sony RAW (.arw) files to get started</p>
+                <p class="upload-hint">Shift+click to select multiple photos</p>
+            </div>
+        `;
             this.updateSelectionBar();
             return;
         }
 
         previewGrid.innerHTML = this.uploadedFiles.map((file, index) => {
-            let dateDisplay = 'Date: Unavailable';
-            if (file.metadata && file.metadata.dateTime) {
-                try {
-                    const date = new Date(file.metadata.dateTime);
-                    if (!isNaN(date.getTime())) {
-                        dateDisplay = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                    }
-                } catch (e) { }
-            }
-
             const isSelected = this.selectedFiles.has(index);
-            const originalName = this.escapeHtml(file.originalName || '');
-            const truncatedName = this.truncateFileName(file.originalName);
-            const fileType = (file.type || '.arw').toUpperCase().replace('.', '');
-            const hasLensInfo = file.metadata && file.metadata.hasLensInfo;
-            const previewUrl = file.preview || '/api/placeholder-preview';
-
-            let exposureDisplay = '';
-            if (file.metadata && file.metadata.exposureTime) {
-                const exp = file.metadata.exposureTime;
-                if (typeof exp === 'number') {
-                    exposureDisplay = exp >= 1 ? `${exp}s` : `1/${Math.round(1 / exp)}s`;
-                } else {
-                    exposureDisplay = exp;
-                }
-            }
+            const hasPreview = file.preview && file.previewStatus === 'ready';
+            const previewUrl = hasPreview ? file.preview : '/api/placeholder-preview';
+            const isLoading = !hasPreview;
 
             return `
-            <div class="photo-card ${isSelected ? 'selected' : ''}" data-index="${index}">
-                <div class="photo-preview" data-index="${index}">
-                    ${hasLensInfo ? '<div class="lens-warning" title="Already has lens info"><i class="fas fa-times"></i></div>' : ''}
-                    <img src="${previewUrl}" alt="${originalName}" data-index="${index}">
-                    <div class="checkbox ${isSelected ? 'checked' : ''}" data-index="${index}"></div>
-                    <button class="remove-btn" data-index="${index}" title="Remove from list">
-                        <i class="fas fa-trash"></i>
-                    </button>
+        <div class="photo-card ${isSelected ? 'selected' : ''}" data-index="${index}">
+            <div class="photo-preview ${isLoading ? 'preview-loading' : ''}" data-index="${index}">
+                ${file.metadata?.hasLensInfo ? '<div class="lens-warning" title="Already has lens info"><i class="fas fa-times"></i></div>' : ''}
+                <img src="${previewUrl}" alt="${this.escapeHtml(file.originalName)}" 
+                     style="opacity: ${hasPreview ? '1' : '0.6'}; transition: opacity 0.3s;">
+                ${isLoading ? '<div class="preview-loader"><i class="fas fa-spinner fa-spin"></i></div>' : ''}
+                <div class="checkbox ${isSelected ? 'checked' : ''}" data-index="${index}"></div>
+                <button class="remove-btn" data-index="${index}" title="Remove from list">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div class="photo-info">
+                <div class="photo-name" title="${this.escapeHtml(file.originalName)}">
+                    ${this.truncateFileName(file.originalName)}
                 </div>
-                <div class="photo-info">
-                    <div class="photo-name" title="${originalName}">
-                        ${this.escapeHtml(truncatedName)}
-                        <span class="file-type">${this.escapeHtml(fileType)}</span>
-                    </div>
-                    <div class="photo-meta">
-                        <div><i class="far fa-calendar"></i> ${dateDisplay}</div>
-                        ${file.metadata && file.metadata.cameraModel ? `<div><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</div>` : ''}
-                        ${file.metadata && file.metadata.lensModel ?
-                    `<div class="lens-info-existing"><i class="fas fa-lens"></i> ${this.escapeHtml(file.metadata.lensModel)}</div>` :
-                    `<div class="no-lens-info"><i class="fas fa-lens"></i> No lens info</div>`}
-                        <div class="photo-exif">
-                            ${file.metadata && file.metadata.focalLength ? `<span><i class="fas fa-ruler"></i> ${this.escapeHtml(file.metadata.focalLength)}</span>` : ''}
-                            ${file.metadata && file.metadata.aperture ? `<span><i class="fas fa-circle"></i> ${this.escapeHtml(file.metadata.aperture)}</span>` : ''}
-                            ${file.metadata && file.metadata.iso ? `<span><i class="fas fa-sun"></i> ISO ${this.escapeHtml(file.metadata.iso)}</span>` : ''}
-                            ${exposureDisplay ? `<span><i class="fas fa-stopwatch"></i> ${exposureDisplay}</span>` : ''}
-                        </div>
-                    </div>
+                <div class="photo-meta">
+                    ${file.metadata?.cameraModel ? `<div><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</div>` : ''}
                 </div>
             </div>
-            `;
+        </div>
+        `;
         }).join('');
 
         this.attachPreviewEventListeners();
@@ -777,37 +1136,68 @@ class LensManager {
         }
     }
 
-    // Update updateSelectionBar method
+    // When selection changes, update the selection bar
     updateSelectionBar() {
-        const selectionBar = document.getElementById('selectionBar');
-        const selectionCount = document.getElementById('selectionCount');
+        const bar = document.getElementById('selectionBar');
+        const count = document.getElementById('selectionCount');
 
-        if (this.selectedFiles.size > 0 && selectionBar) {
-            selectionBar.style.display = 'flex';
-            selectionCount.textContent = this.selectedFiles.size;
-        } else if (selectionBar) {
-            selectionBar.style.display = 'none';
+        if (this.selectedFiles.size > 0) {
+            bar.style.display = 'flex';
+            count.textContent = this.selectedFiles.size;
+
+            // Sync the dropdown with current selected lens
+            const select = document.getElementById('selectionLensSelect');
+            if (select && this.selectedLens) {
+                select.value = this.selectedLens;
+            }
+
+            this.updateApplyButton();
+        } else {
+            bar.style.display = 'none';
         }
     }
 
+    // When photos are selected/deselected, update both apply buttons
     updateApplyButton() {
-        const applyBtn = document.getElementById('applyBtn');
-        applyBtn.disabled = this.selectedFiles.size === 0 || !this.selectedLens;
+        const mainApplyBtn = document.getElementById('applyBtn');
+        const selectionApplyBtn = document.getElementById('applyToSelectedBtn');
 
-        const selectionCount = this.selectedFiles.size;
-        applyBtn.innerHTML = selectionCount === 0 || !this.selectedLens ?
-            '<i class="fas fa-magic"></i> Apply Lens to Selected Photos' :
-            `<i class="fas fa-magic"></i> Apply to ${selectionCount} Photo${selectionCount !== 1 ? 's' : ''}`;
+        const hasSelection = this.selectedFiles.size > 0;
+        const hasLens = this.selectedLens !== null;
+
+        if (mainApplyBtn) {
+            mainApplyBtn.disabled = !hasSelection || !hasLens;
+        }
+
+        if (selectionApplyBtn) {
+            selectionApplyBtn.disabled = !hasSelection || !hasLens;
+        }
     }
 
     updateFileCount() {
         document.getElementById('fileCount').textContent = this.uploadedFiles.length;
     }
 
+    // When user clicks a lens card in the left panel
     selectLens(lensId) {
         this.selectedLens = lensId;
-        this.renderLenses();
+        this.renderLenses(); // Re-render to highlight the selected card
+
+        // Sync with selection bar dropdown
+        const select = document.getElementById('selectionLensSelect');
+        if (select) {
+            select.value = lensId;
+        }
+
         this.updateApplyButton();
+
+        // Also update the apply button in selection bar
+        const applyBtn = document.getElementById('applyToSelectedBtn');
+        if (applyBtn) {
+            applyBtn.disabled = this.selectedFiles.size === 0;
+        }
+
+        console.log(`Lens selected: ${lensId}`);
     }
 
     openPhotoModal(index) {
@@ -1228,6 +1618,23 @@ class LensManager {
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    updateSelectionBar() {
+        const bar = document.getElementById('selectionBar');
+        const count = document.getElementById('selectionCount');
+        const applyBtn = document.getElementById('applyToSelectedBtn');
+
+        if (this.selectedFiles.size > 0) {
+            bar.style.display = 'flex';
+            count.textContent = this.selectedFiles.size;
+
+            // Enable apply button only if a lens is selected
+            const select = document.getElementById('selectionLensSelect');
+            applyBtn.disabled = !select || !select.value;
+        } else {
+            bar.style.display = 'none';
+        }
     }
 }
 
