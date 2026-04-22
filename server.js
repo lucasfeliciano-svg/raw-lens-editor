@@ -156,173 +156,364 @@ const uploadLensImage = multer({
     }
 });
 
-// Generate lens collection report
+// Generate lens collection report (fixed version)
 app.get('/api/lenses/report', async (req, res) => {
     try {
         const lensesData = await loadLenses();
         const lenses = lensesData.lenses.filter(l => l.isOwned !== false);
 
-        // Create PDF document
         const doc = new PDFDocument({
             size: 'A4',
-            margin: 50,
+            margin: 35,
+            bufferPages: true,
             info: {
                 Title: 'Lens Collection Report',
                 Author: 'Sony Lens Manager'
             }
         });
 
-        // Set response headers
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', 'attachment; filename="lens-collection.pdf"');
 
         doc.pipe(res);
 
-        // Cover page
+        // ===== COVER PAGE =====
+        doc.rect(0, 0, doc.page.width, 150)
+            .fill('#667eea');
+
         doc.fontSize(28)
             .font('Helvetica-Bold')
-            .text('Lens Collection Report', { align: 'center' })
-            .moveDown(0.5);
+            .fillColor('white')
+            .text('Lens Collection', 0, 50, { align: 'center' })
+            .fontSize(16)
+            .text('Report', 0, 85, { align: 'center' });
 
-        doc.fontSize(14)
-            .font('Helvetica')
-            .text(`Generated: ${new Date().toLocaleDateString()}`, { align: 'center' })
-            .moveDown(2);
+        doc.fontSize(11)
+            .fillColor('#2c3e50')
+            .text(`Generated: ${new Date().toLocaleDateString('en-US', {
+                year: 'numeric', month: 'long', day: 'numeric'
+            })}`, 0, 180, { align: 'center' });
 
-        doc.fontSize(12)
-            .text(`Total Lenses: ${lenses.length}`, { align: 'center' })
-            .moveDown(3);
+        doc.fontSize(13)
+            .fillColor('#7f8c8d')
+            .text(`Total Lenses in Collection: ${lenses.length}`, 0, 210, { align: 'center' });
 
-        // Summary table
+        doc.rect(200, 240, 195, 2).fill('#667eea');
+
+        // Mount summary
+        const mountCounts = {};
+        lenses.forEach(l => {
+            if (l.mount) {
+                mountCounts[l.mount] = (mountCounts[l.mount] || 0) + 1;
+            }
+        });
+
+        doc.fontSize(13)
+            .font('Helvetica-Bold')
+            .fillColor('#2c3e50')
+            .text('Collection by Mount', 0, 280, { align: 'center' });
+
+        doc.fontSize(10).font('Helvetica');
+
+        let mountY = 310;
+        Object.entries(mountCounts).sort((a, b) => b[1] - a[1]).forEach(([mount, count]) => {
+            doc.fillColor('#2c3e50').text(`• ${mount}: ${count} lens${count !== 1 ? 'es' : ''}`, 0, mountY, { align: 'center' });
+            mountY += 18;
+        });
+
+        // ===== SUMMARY TABLE =====
+        doc.addPage();
+
         doc.fontSize(16)
             .font('Helvetica-Bold')
-            .text('Collection Summary', { underline: true })
-            .moveDown();
+            .fillColor('#2c3e50')
+            .text('Collection Summary', 35, 35);
 
-        const summaryData = [
-            ['Lens Name', 'Focal Length', 'Aperture', 'Serial #'],
-            ...lenses.map(l => [
-                l.name.substring(0, 30),
-                l.focalLength || '-',
-                l.aperture || '-',
-                l.serialNumber || '-'
-            ])
-        ];
+        const tableTop = 70;
+        const headers = ['Lens Name', 'Mount', 'Focal', 'Aperture', 'Serial #'];
+        const colWidths = [200, 80, 55, 55, 100];
+        const rowHeight = 22;
 
-        // Draw summary table
-        let yPos = doc.y;
-        const colWidths = [200, 80, 60, 150];
+        doc.rect(35, tableTop - 5, 525, 22).fill('#667eea');
 
-        summaryData.forEach((row, idx) => {
-            let xPos = 50;
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('white');
 
-            row.forEach((cell, colIdx) => {
-                if (idx === 0) {
-                    doc.font('Helvetica-Bold');
-                } else {
-                    doc.font('Helvetica');
-                }
+        let xPos = 40;
+        headers.forEach((header, i) => {
+            doc.text(header, xPos, tableTop, { width: colWidths[i] - 5 });
+            xPos += colWidths[i];
+        });
 
-                doc.text(cell, xPos, yPos, {
-                    width: colWidths[colIdx],
-                    continued: colIdx < row.length - 1
-                });
+        doc.font('Helvetica').fillColor('#2c3e50');
+        let yPos = tableTop + 22;
 
-                xPos += colWidths[colIdx];
+        lenses.forEach((lens, idx) => {
+            if (idx % 2 === 0) {
+                doc.rect(35, yPos - 5, 525, rowHeight).fill('#f8f9fa');
+            }
+
+            doc.fillColor('#2c3e50');
+            xPos = 40;
+
+            const rowData = [
+                (lens.name || '').substring(0, 28),
+                lens.mount || '-',
+                lens.focalLength || '-',
+                lens.aperture || '-',
+                lens.serialNumber || '-'
+            ];
+
+            rowData.forEach((cell, i) => {
+                doc.text(cell || '-', xPos, yPos, { width: colWidths[i] - 5 });
+                xPos += colWidths[i];
             });
 
-            yPos += idx === 0 ? 30 : 22;
+            yPos += rowHeight;
 
-            if (yPos > 700) {
+            if (yPos > 780) {
                 doc.addPage();
                 yPos = 50;
             }
         });
 
-        // Individual lens pages
+        
+                // ===== INDIVIDUAL LENS PAGES (300x300 IMAGES WITH WEBP SUPPORT) =====
         for (const lens of lenses) {
             doc.addPage();
-
-            // Lens header
-            doc.fontSize(22)
-                .font('Helvetica-Bold')
-                .text(lens.name, { align: 'left' })
-                .moveDown(0.5);
-
-            // Lens image (if available)
-            if (lens.primaryImage) {
-                const imagePath = path.join(
-                    app.locals.lensImagesDir,
-                    path.basename(lens.primaryImage)
-                );
-
-                if (fsSync.existsSync(imagePath)) {
-                    doc.image(imagePath, 50, doc.y, {
-                        width: 200,
-                        align: 'left'
-                    });
+            
+            // Header
+            doc.rect(0, 0, doc.page.width, 55)
+               .fill('#667eea');
+            
+            doc.fontSize(16)
+               .font('Helvetica-Bold')
+               .fillColor('white')
+               .text(lens.name.substring(0, 40), 35, 18);
+            
+            doc.fontSize(10)
+               .font('Helvetica')
+               .text(`${lens.mount || ''}  •  ${lens.focalLength || ''}  •  ${lens.aperture || ''}`, 35, 38);
+            
+            // Larger image - 300x300
+            const imageSize = 300;
+            const imageX = 35;
+            const imageY = 75;
+            
+            // Draw decorative frame
+            doc.rect(imageX - 3, imageY - 3, imageSize + 6, imageSize + 6)
+               .fill('#e9ecef');
+            doc.rect(imageX - 1, imageY - 1, imageSize + 2, imageSize + 2)
+               .fill('white');
+            doc.rect(imageX, imageY, imageSize, imageSize)
+               .fill('#f8f9fa');
+            
+            let imageDisplayed = false;
+            
+            // Helper: Check if file is a valid image
+            const isValidImage = (filePath) => {
+                try {
+                    if (!fsSync.existsSync(filePath)) return false;
+                    const stats = fsSync.statSync(filePath);
+                    if (stats.size < 500) return false;
+                    return true;
+                } catch (err) {
+                    return false;
+                }
+            };
+            
+            // Helper: Convert WebP to JPEG if needed
+            const getDisplayableImagePath = async (inputPath) => {
+                try {
+                    const ext = path.extname(inputPath).toLowerCase();
+                    
+                    // If it's already JPEG or PNG, return as-is
+                    if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
+                        return inputPath;
+                    }
+                    
+                    // For WebP or other formats, convert to JPEG
+                    const tempDir = path.join(app.locals.previewsDir, 'temp');
+                    await fs.mkdir(tempDir, { recursive: true });
+                    
+                    const tempFile = path.join(tempDir, `lens-${Date.now()}.jpg`);
+                    
+                    await sharp(inputPath)
+                        .resize(imageSize, imageSize, { fit: 'inside', withoutEnlargement: true })
+                        .jpeg({ quality: 90 })
+                        .toFile(tempFile);
+                    
+                    console.log(`  ✓ Converted ${ext} to JPEG`);
+                    return tempFile;
+                } catch (err) {
+                    console.error(`  ✗ Conversion failed:`, err.message);
+                    return null;
+                }
+            };
+            
+            const tryImagePaths = [];
+            if (lens.primaryImage) tryImagePaths.push(lens.primaryImage);
+            if (lens.imageUrl) tryImagePaths.push(lens.imageUrl);
+            
+            for (const imgPath of tryImagePaths) {
+                if (imageDisplayed) break;
+                if (!imgPath || typeof imgPath !== 'string') continue;
+                
+                try {
+                    const filename = path.basename(imgPath);
+                    const possiblePaths = [
+                        path.join(app.locals.lensImagesDir, filename),
+                        path.join(__dirname, 'public', 'lens-images', filename),
+                        path.join(userDataPath, 'lens-images', filename)
+                    ];
+                    
+                    for (const testPath of possiblePaths) {
+                        if (isValidImage(testPath)) {
+                            // Convert if needed (handles WebP)
+                            const displayPath = await getDisplayableImagePath(testPath);
+                            
+                            if (displayPath && fsSync.existsSync(displayPath)) {
+                                // Get image dimensions to center it
+                                const metadata = await sharp(displayPath).metadata();
+                                
+                                // Calculate centering offsets
+                                const imgWidth = metadata.width;
+                                const imgHeight = metadata.height;
+                                
+                                let offsetX = imageX;
+                                let offsetY = imageY;
+                                let finalWidth = imageSize;
+                                let finalHeight = imageSize;
+                                
+                                // Center the image within the frame
+                                if (imgWidth > imgHeight) {
+                                    finalHeight = (imgHeight / imgWidth) * imageSize;
+                                    offsetY = imageY + (imageSize - finalHeight) / 2;
+                                } else {
+                                    finalWidth = (imgWidth / imgHeight) * imageSize;
+                                    offsetX = imageX + (imageSize - finalWidth) / 2;
+                                }
+                                
+                                doc.image(displayPath, offsetX, offsetY, { 
+                                    width: finalWidth, 
+                                    height: finalHeight
+                                });
+                                
+                                imageDisplayed = true;
+                                console.log(`✓ Displayed image: ${filename}`);
+                                break;
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.log(`  Image error:`, err.message);
                 }
             }
-
+            
+            if (!imageDisplayed) {
+                // Larger placeholder
+                doc.fontSize(80)
+                   .fillColor('#bdc3c7')
+                   .text('📷', imageX + 85, imageY + 90);
+                doc.fontSize(12)
+                   .fillColor('#95a5a6')
+                   .text('No image available', imageX, imageY + imageSize + 5, { 
+                       width: imageSize, 
+                       align: 'center' 
+                   });
+            }
+            
+            // Details section - below the image since it's now larger
+            const detailsY = imageY + imageSize + 20;
+            
+            doc.fontSize(10).font('Helvetica');
+            
             // Two-column layout for details
-            const leftCol = 280;
-            const rightCol = 320;
-
-            doc.fontSize(11)
-                .font('Helvetica');
-
-            const details = [
-                ['Maker:', lens.maker],
-                ['Mount:', lens.mount],
-                ['Type:', lens.type],
-                ['Focal Length:', lens.focalLength],
-                ['Aperture:', lens.aperture],
-                ['Serial Number:', lens.serialNumber],
-                ['Purchase Date:', lens.purchaseDate],
-                ['Purchase Price:', lens.purchasePrice ? `$${lens.purchasePrice}` : null],
-                ['Condition:', lens.condition],
-                ['Filter Thread:', lens.filterThread],
-                ['Weight:', lens.weight],
-                ['Min Focus:', lens.minFocusDistance],
-                ['Max Magnification:', lens.maxMagnification],
-                ['Optical Design:', lens.opticalDesign]
-            ];
-
-            yPos = doc.y + 20;
-
-            details.forEach(([label, value]) => {
-                if (value) {
-                    doc.font('Helvetica-Bold')
-                        .text(label, 50, yPos, { continued: true })
-                        .font('Helvetica')
-                        .text(` ${value}`);
-                    yPos += 18;
+            const leftColX = 35;
+            const rightColX = 300;
+            let leftY = detailsY;
+            let rightY = detailsY;
+            
+            const detailItems = [
+                { label: 'Maker', value: lens.maker },
+                { label: 'Mount', value: lens.mount },
+                { label: 'Serial Number', value: lens.serialNumber },
+                { label: 'Condition', value: lens.condition },
+                { label: 'Purchase Date', value: lens.purchaseDate },
+                { label: 'Purchase Price', value: lens.purchasePrice ? `$${lens.purchasePrice}` : null }
+            ].filter(item => item.value);
+            
+            detailItems.forEach((item, i) => {
+                const xPos = i < 3 ? leftColX : rightColX;
+                const yPos = i < 3 ? leftY : rightY;
+                
+                doc.fillColor('#7f8c8d').text(`${item.label}:`, xPos, yPos, { continued: true });
+                doc.fillColor('#2c3e50').text(` ${item.value}`);
+                
+                if (i < 3) {
+                    leftY += 18;
+                } else {
+                    rightY += 18;
                 }
             });
-
-            // Notes section
-            if (lens.notes) {
-                doc.moveDown(2)
-                    .font('Helvetica-Bold')
-                    .text('Notes:', { underline: true })
-                    .font('Helvetica')
-                    .text(lens.notes, { width: 500 });
+            
+            // Technical Specifications
+            const specsY = Math.max(leftY, rightY) + 15;
+            
+            const specFields = [
+                { label: 'Filter Thread', value: lens.filterThread },
+                { label: 'Weight', value: lens.weight },
+                { label: 'Dimensions', value: lens.dimensions },
+                { label: 'Optical Design', value: lens.opticalDesign },
+                { label: 'Min Focus Distance', value: lens.minFocusDistance },
+                { label: 'Max Magnification', value: lens.maxMagnification },
+                { label: 'Hood Model', value: lens.hoodModel }
+            ];
+            
+            const populatedSpecs = specFields.filter(s => s.value && s.value.trim() !== '');
+            
+            if (populatedSpecs.length > 0) {
+                doc.rect(35, specsY, 525, 75)
+                   .fill('#f8f9fa')
+                   .stroke('#e9ecef');
+                
+                doc.fontSize(11)
+                   .font('Helvetica-Bold')
+                   .fillColor('#2c3e50')
+                   .text('Technical Specifications', 50, specsY + 12);
+                
+                doc.fontSize(9).font('Helvetica');
+                
+                let specX = 50;
+                let specRowY = specsY + 32;
+                
+                populatedSpecs.forEach((item, i) => {
+                    doc.fillColor('#7f8c8d').text(`${item.label}:`, specX, specRowY, { continued: true });
+                    doc.fillColor('#2c3e50').text(` ${item.value}`);
+                    
+                    if (i % 2 === 0) {
+                        specX = 300;
+                    } else {
+                        specX = 50;
+                        specRowY += 18;
+                    }
+                });
             }
-
-            // Footer
-            doc.fontSize(8)
-                .text(
-                    `Lens ID: ${lens.id} | Added: ${lens.createdAt || 'N/A'}`,
-                    50, 780,
-                    { align: 'center', color: 'grey' }
-                );
+            
+            // Footer at Y=780
+            doc.fontSize(7)
+               .fillColor('#95a5a6')
+               .text(
+                   `Lens ID: ${lens.id} | Created: ${lens.createdAt ? new Date(lens.createdAt).toLocaleDateString() : 'N/A'}`,
+                   35, 780,
+                   { align: 'center', width: 525 }
+               );
         }
-
+        
         doc.end();
 
     } catch (err) {
         console.error('Report generation error:', err);
-        res.status(500).json({ error: 'Failed to generate report' });
+        res.status(500).json({ error: 'Failed to generate report: ' + err.message });
     }
 });
 
@@ -559,6 +750,50 @@ const generateARWPreview = async (arwPath, previewPath, size = 300) => {
 app.locals.uploadedFiles = [];
 
 // ===== API ROUTES =====
+
+
+// Debug endpoint to check lens images
+app.get('/api/debug/lens-images', async (req, res) => {
+    try {
+        const lensesData = await loadLenses();
+        const debugInfo = [];
+
+        for (const lens of lensesData.lenses) {
+            const imageInfo = {
+                name: lens.name,
+                imageUrl: lens.imageUrl,
+                primaryImage: lens.primaryImage,
+                exists: false,
+                fullPath: null,
+                validImage: false
+            };
+
+            if (lens.primaryImage || lens.imageUrl) {
+                const imgPath = lens.primaryImage || lens.imageUrl;
+                const filename = path.basename(imgPath);
+                const fullPath = path.join(app.locals.lensImagesDir, filename);
+
+                imageInfo.fullPath = fullPath;
+                imageInfo.exists = fsSync.existsSync(fullPath);
+
+                if (imageInfo.exists) {
+                    const stats = fsSync.statSync(fullPath);
+                    imageInfo.size = stats.size;
+                    imageInfo.validImage = stats.size > 500;
+                }
+            }
+
+            debugInfo.push(imageInfo);
+        }
+
+        res.json({
+            lensImagesDir: app.locals.lensImagesDir,
+            lenses: debugInfo
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
