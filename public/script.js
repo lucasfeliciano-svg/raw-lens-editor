@@ -68,24 +68,36 @@ class LensManager {
     }
 
     async checkSyncStatus() {
-        try {
-            const response = await fetch('/api/sync/status');
-            const status = await response.json();
-
-            const syncBtn = document.getElementById('syncBtn');
-            if (!status.syncAvailable && syncBtn) {
-                syncBtn.style.display = 'none';
-                return;
-            }
-
-            if (status.updatesAvailable && syncBtn) {
-                syncBtn.classList.add('has-updates');
-                syncBtn.innerHTML = `<i class="fas fa-cloud-download-alt"></i> Sync (${status.behindCount})`;
-            }
-        } catch (err) {
-            console.log('Sync check skipped');
+    try {
+        const response = await fetch('/api/sync/status');
+        const status = await response.json();
+        
+        const syncBtn = document.getElementById('syncBtn');
+        if (!syncBtn) return;
+        
+        // Always show the button, even if sync isn't available
+        syncBtn.style.display = '';
+        
+        if (!status.syncAvailable) {
+            syncBtn.style.opacity = '0.5';
+            syncBtn.title = 'Sync not available';
+            return;
+        }
+        
+        syncBtn.style.opacity = '1';
+        if (status.updatesAvailable) {
+            syncBtn.classList.add('has-updates');
+            syncBtn.innerHTML = `<i class="fas fa-cloud-download-alt"></i> Sync (${status.behindCount})`;
+        }
+    } catch (err) {
+        console.log('Sync check failed, showing button anyway:', err.message);
+        const syncBtn = document.getElementById('syncBtn');
+        if (syncBtn) {
+            syncBtn.style.display = '';
+            syncBtn.style.opacity = '0.5';
         }
     }
+}
 
     async syncApp() {
         const syncBtn = document.getElementById('syncBtn');

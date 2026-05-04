@@ -11,8 +11,42 @@ const { promisify } = require('util');
 const execPromise = promisify(exec);
 const os = require('os');
 const PDFDocument = require('pdfkit');
-const GitService = require('./git-service');
-const gitService = new GitService(path.join(__dirname, 'lens-data-repo'));
+
+
+// Find git-service.js - it's unpacked from asar
+let gitServicePath;
+const pathsToTry = [
+    path.join(__dirname, 'git-service.js'),                                          // dev mode
+    path.join(__dirname, '..', 'app.asar.unpacked', 'git-service.js'),               // asar unpacked
+    path.join(__dirname, '..', '..', 'Resources', 'git-service.js'),                 // extraResources
+];
+
+for (const p of pathsToTry) {
+    if (fsSync.existsSync(p)) {
+        gitServicePath = p;
+        console.log('Found git-service at:', p);
+        break;
+    }
+}
+
+let GitService;
+let gitService;
+
+if (gitServicePath) {
+    GitService = require(gitServicePath);
+    gitService = new GitService(path.dirname(gitServicePath));
+    gitService.initialize().catch(err => {
+        console.log('Git service not available, running in local mode');
+    });
+} else {
+    console.log('git-service.js not found - sync disabled');
+    // Create a dummy gitService that always says unavailable
+    gitService = {
+        isAvailable: () => false,
+        syncStatus: async () => ({ syncAvailable: false, localOnly: true }),
+        sync: async () => ({ success: false, localOnly: true })
+    };
+}
 
 gitService.initialize().catch(err => {
     console.log('Git service not available, running in local mode');
