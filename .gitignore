@@ -2,5 +2,6 @@ dist/
 build/
 release/
 out/
+node_modules/
 *.dmg
 *.zip

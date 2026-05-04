@@ -25,6 +25,27 @@ class LensManager {
         await this.loadOutputDirectory();
         await this.cleanupTempFiles();
 
+        // Sync button
+        const syncBtn = document.getElementById('syncBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', () => this.syncApp());
+        }
+
+        // Reload lenses button
+        const reloadBtn = document.getElementById('reloadLensesBtn');
+        if (reloadBtn) {
+            reloadBtn.addEventListener('click', async () => {
+                await this.loadLenses();
+                this.renderLenses();
+                this.showNotification('Lenses reloaded', 'success');
+            });
+        }
+
+        // Check for cloud updates on startup
+        if (navigator.onLine) {
+            this.checkSyncStatus();
+        }
+
         this.showNotification('Application ready. Shift+click to select multiple photos!', 'success');
 
         // Expose modal functions globally
@@ -42,6 +63,57 @@ class LensManager {
         });
     }
 
+    async checkSyncStatus() {
+        try {
+            const response = await fetch('/api/sync/status');
+            const status = await response.json();
+
+            const syncBtn = document.getElementById('syncBtn');
+            if (!status.syncAvailable && syncBtn) {
+                syncBtn.style.display = 'none';
+                return;
+            }
+
+            if (status.updatesAvailable && syncBtn) {
+                syncBtn.classList.add('has-updates');
+                syncBtn.innerHTML = `<i class="fas fa-cloud-download-alt"></i> Sync (${status.behindCount})`;
+            }
+        } catch (err) {
+            console.log('Sync check skipped');
+        }
+    }
+
+    async syncApp() {
+        const syncBtn = document.getElementById('syncBtn');
+        if (!syncBtn) return;
+
+        const originalHTML = syncBtn.innerHTML;
+        syncBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Syncing...';
+        syncBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/sync/lenses', { method: 'POST' });
+            const result = await response.json();
+
+            if (result.lenses) {
+                this.lenses = result.lenses;
+                this.renderLenses();
+            }
+
+            syncBtn.classList.remove('has-updates');
+            syncBtn.innerHTML = '<i class="fas fa-check-circle"></i> Synced';
+            this.showNotification(result.message || 'Synced!', 'success');
+
+            setTimeout(() => {
+                syncBtn.innerHTML = originalHTML;
+                syncBtn.disabled = false;
+            }, 3000);
+        } catch (err) {
+            syncBtn.innerHTML = originalHTML;
+            syncBtn.disabled = false;
+            this.showNotification('Sync failed', 'error');
+        }
+    }
     async refreshLenses() {
         await this.loadLenses();
         this.renderLenses();
@@ -350,121 +422,121 @@ class LensManager {
     }
 
     async uploadFiles(files) {
-    const allowedTypes = ['.arw', '.ARW', '.jpg', '.jpeg', '.JPEG', '.JPG'];
-    const validFiles = Array.from(files).filter(file => {
-        const ext = '.' + file.name.split('.').pop().toLowerCase();
-        return allowedTypes.includes(ext);
-    });
+        const allowedTypes = ['.arw', '.ARW', '.jpg', '.jpeg', '.JPEG', '.JPG'];
+        const validFiles = Array.from(files).filter(file => {
+            const ext = '.' + file.name.split('.').pop().toLowerCase();
+            return allowedTypes.includes(ext);
+        });
 
-    if (validFiles.length === 0) {
-        this.showNotification('No valid files selected. Please upload Sony RAW (.arw) files.', 'error');
-        return;
-    }
+        if (validFiles.length === 0) {
+            this.showNotification('No valid files selected. Please upload Sony RAW (.arw) files.', 'error');
+            return;
+        }
 
-    // Show progress section
-    const progressSection = document.getElementById('uploadProgressSection');
-    const progressFill = document.getElementById('uploadProgressFill');
-    const progressText = document.getElementById('uploadProgressText');
-    const fileListContainer = document.getElementById('uploadFileList');
+        // Show progress section
+        const progressSection = document.getElementById('uploadProgressSection');
+        const progressFill = document.getElementById('uploadProgressFill');
+        const progressText = document.getElementById('uploadProgressText');
+        const fileListContainer = document.getElementById('uploadFileList');
 
-    progressSection.style.display = 'block';
-    progressFill.style.width = '0%';
-    progressText.textContent = `Uploading ${validFiles.length} file(s) in parallel...`;
+        progressSection.style.display = 'block';
+        progressFill.style.width = '0%';
+        progressText.textContent = `Uploading ${validFiles.length} file(s) in parallel...`;
 
-    // Create file list
-    fileListContainer.innerHTML = validFiles.map((file, idx) => `
+        // Create file list
+        fileListContainer.innerHTML = validFiles.map((file, idx) => `
         <div class="file-progress-item" data-index="${idx}">
             <span class="file-name">${this.escapeHtml(file.name)}</span>
             <span class="file-status" id="fileStatus-${idx}">⏳ Pending</span>
         </div>
     `).join('');
 
-    let completedUploads = 0;
-    const totalFiles = validFiles.length;
+        let completedUploads = 0;
+        const totalFiles = validFiles.length;
 
-    // Function to update a single file's status
-    const updateFileStatus = (idx, status, text, color) => {
-        const statusEl = document.getElementById(`fileStatus-${idx}`);
-        if (statusEl) {
-            statusEl.textContent = text;
-            statusEl.style.color = color;
-        }
-    };
-
-    // Function to update overall progress
-    const updateOverallProgress = () => {
-        completedUploads++;
-        const percent = Math.round((completedUploads / totalFiles) * 100);
-        progressFill.style.width = `${percent}%`;
-        progressText.textContent = `Uploading: ${completedUploads}/${totalFiles} files (${percent}%)`;
-    };
-
-    // Create upload promises for ALL files (parallel execution)
-    const uploadPromises = validFiles.map(async (file, idx) => {
-        // Update status to uploading
-        updateFileStatus(idx, 'uploading', '⬆️ Uploading...', '#3498db');
-        
-        const formData = new FormData();
-        formData.append('photos', file);
-
-        try {
-            const response = await fetch('/api/upload-single', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                updateFileStatus(idx, 'completed', '✅ Uploaded', '#27ae60');
-                updateOverallProgress();
-                
-                const fileInfo = result.file;
-                fileInfo.preview = null;
-                fileInfo.previewStatus = 'pending';
-                
-                return { success: true, fileInfo, index: idx };
-            } else {
-                throw new Error(result.error || 'Upload failed');
+        // Function to update a single file's status
+        const updateFileStatus = (idx, status, text, color) => {
+            const statusEl = document.getElementById(`fileStatus-${idx}`);
+            if (statusEl) {
+                statusEl.textContent = text;
+                statusEl.style.color = color;
             }
-        } catch (error) {
-            updateFileStatus(idx, 'failed', '❌ Failed', '#e74c3c');
-            updateOverallProgress();
-            return { success: false, error: error.message, index: idx };
+        };
+
+        // Function to update overall progress
+        const updateOverallProgress = () => {
+            completedUploads++;
+            const percent = Math.round((completedUploads / totalFiles) * 100);
+            progressFill.style.width = `${percent}%`;
+            progressText.textContent = `Uploading: ${completedUploads}/${totalFiles} files (${percent}%)`;
+        };
+
+        // Create upload promises for ALL files (parallel execution)
+        const uploadPromises = validFiles.map(async (file, idx) => {
+            // Update status to uploading
+            updateFileStatus(idx, 'uploading', '⬆️ Uploading...', '#3498db');
+
+            const formData = new FormData();
+            formData.append('photos', file);
+
+            try {
+                const response = await fetch('/api/upload-single', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    updateFileStatus(idx, 'completed', '✅ Uploaded', '#27ae60');
+                    updateOverallProgress();
+
+                    const fileInfo = result.file;
+                    fileInfo.preview = null;
+                    fileInfo.previewStatus = 'pending';
+
+                    return { success: true, fileInfo, index: idx };
+                } else {
+                    throw new Error(result.error || 'Upload failed');
+                }
+            } catch (error) {
+                updateFileStatus(idx, 'failed', '❌ Failed', '#e74c3c');
+                updateOverallProgress();
+                return { success: false, error: error.message, index: idx };
+            }
+        });
+
+        // Wait for ALL uploads to complete in parallel
+        const uploadResults = await Promise.all(uploadPromises);
+
+        const successfulUploads = uploadResults.filter(r => r.success);
+        const failedUploads = uploadResults.filter(r => !r.success);
+
+        // Add uploaded files to the grid immediately
+        const newFiles = successfulUploads.map(r => r.fileInfo);
+        this.uploadedFiles = [...this.uploadedFiles, ...newFiles];
+        this.renderPreviews();
+        this.updateFileCount();
+
+        progressFill.style.width = '100%';
+        progressText.textContent = `✓ ${successfulUploads.length} files uploaded!`;
+
+        if (failedUploads.length > 0) {
+            this.showNotification(`${successfulUploads.length} uploaded, ${failedUploads.length} failed`, 'error');
+        } else {
+            this.showNotification(`${successfulUploads.length} files uploaded successfully!`, 'success');
         }
-    });
 
-    // Wait for ALL uploads to complete in parallel
-    const uploadResults = await Promise.all(uploadPromises);
-    
-    const successfulUploads = uploadResults.filter(r => r.success);
-    const failedUploads = uploadResults.filter(r => !r.success);
+        // Hide progress section after delay
+        setTimeout(() => {
+            progressSection.style.display = 'none';
+        }, 2000);
 
-    // Add uploaded files to the grid immediately
-    const newFiles = successfulUploads.map(r => r.fileInfo);
-    this.uploadedFiles = [...this.uploadedFiles, ...newFiles];
-    this.renderPreviews();
-    this.updateFileCount();
-
-    progressFill.style.width = '100%';
-    progressText.textContent = `✓ ${successfulUploads.length} files uploaded!`;
-    
-    if (failedUploads.length > 0) {
-        this.showNotification(`${successfulUploads.length} uploaded, ${failedUploads.length} failed`, 'error');
-    } else {
-        this.showNotification(`${successfulUploads.length} files uploaded successfully!`, 'success');
+        // Start background preview generation
+        if (successfulUploads.length > 0) {
+            this.generatePreviewsInBackground(successfulUploads.map(r => r.fileInfo));
+        }
     }
-
-    // Hide progress section after delay
-    setTimeout(() => {
-        progressSection.style.display = 'none';
-    }, 2000);
-
-    // Start background preview generation
-    if (successfulUploads.length > 0) {
-        this.generatePreviewsInBackground(successfulUploads.map(r => r.fileInfo));
-    }
-}
 
     // Helper: Update single file status in progress list
     updateFileStatus(index, status, text) {

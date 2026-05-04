@@ -11,6 +11,12 @@ const { promisify } = require('util');
 const execPromise = promisify(exec);
 const os = require('os');
 const PDFDocument = require('pdfkit');
+const GitService = require('./git-service');
+const gitService = new GitService(__dirname);
+
+gitService.initialize().catch(err => {
+    console.log('Git service not available, running in local mode');
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -974,6 +980,79 @@ app.post('/api/upload-single', upload.single('photos'), async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+// Batch file upload (frontend compatibility)
+app.post('/api/upload', upload.array('photos', 100), async (req, res) => {
+    try {
+        const files = req.files;
+        if (!files || files.length === 0) {
+            return res.status(400).json({ error: 'No files uploaded' });
+        }
+
+        const uploadedFiles = [];
+        const previewsDir = app.locals.previewsDir;
+
+        for (const file of files) {
+            const baseName = path.parse(file.filename).name;
+            const previewPath = path.join(previewsDir, `${baseName}_preview.jpg`);
+            const largePreviewPath = path.join(previewsDir, `${baseName}_large.jpg`);
+
+            const fileInfo = {
+                originalName: file.originalname,
+                uploadedName: file.filename,
+                path: file.path,
+                size: file.size,
+                type: path.extname(file.originalname).toLowerCase()
+            };
+
+            let metadata = {};
+
+            try {
+                const tags = await readExif(file.path);
+                const dateTime = extractDateTime(tags);
+
+                metadata = {
+                    dateTime: dateTime,
+                    cameraModel: tags.Model || 'Unknown',
+                    lensModel: tags.LensModel || tags.LensID || null,
+                    focalLength: tags.FocalLength || tags.FocalLengthIn35mmFormat || null,
+                    aperture: tags.FNumber ? `F${tags.FNumber}` : null,
+                    iso: tags.ISO || null,
+                    exposureTime: tags.ExposureTime || null,
+                    hasLensInfo: !!(tags.LensModel || tags.LensID),
+                    width: tags.ImageWidth || 0,
+                    height: tags.ImageHeight || 0
+                };
+
+                await generateARWPreview(file.path, previewPath, 300);
+                await generateARWPreview(file.path, largePreviewPath, 1500);
+
+                fileInfo.preview = `/previews/${baseName}_preview.jpg`;
+                fileInfo.largePreview = `/previews/${baseName}_large.jpg`;
+
+            } catch (err) {
+                metadata = { error: err.message, hasLensInfo: false };
+                await createPlaceholderImage(previewPath, 300, 'Error');
+                await createPlaceholderImage(largePreviewPath, 1200, 'Error');
+                fileInfo.preview = `/previews/${baseName}_preview.jpg`;
+                fileInfo.largePreview = `/previews/${baseName}_large.jpg`;
+            }
+
+            fileInfo.metadata = metadata;
+            uploadedFiles.push(fileInfo);
+            app.locals.uploadedFiles.push(fileInfo);
+        }
+
+        res.json({ 
+            success: true, 
+            files: uploadedFiles,
+            message: `Successfully uploaded ${files.length} file(s)`
+        });
+
+    } catch (err) {
+        console.error('Upload error:', err);
+        res.status(500).json({ error: 'Upload failed', details: err.message });
+    }
+});
 
 // Apply lens single
 app.post('/api/apply-lens-single', async (req, res) => {
@@ -1275,6 +1354,66 @@ app.get('/api/output-dir', async (req, res) => {
         res.json({ outputDir });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+// Sync status endpoint
+app.get('/api/sync/status', async (req, res) => {
+    try {
+        if (!gitService.isAvailable()) {
+            return res.json({
+                syncAvailable: false,
+                localOnly: true,
+                message: 'Running in local mode'
+            });
+        }
+        const status = await gitService.syncStatus();
+        res.json(status);
+    } catch (err) {
+        res.json({
+            syncAvailable: false,
+            localOnly: true,
+            message: 'Sync check failed'
+        });
+    }
+});
+
+// Sync lenses endpoint
+app.post('/api/sync/lenses', async (req, res) => {
+    if (!gitService.isAvailable()) {
+        const lensesData = await loadLenses();
+        return res.json({
+            success: true,
+            localOnly: true,
+            message: 'Lenses saved locally. Sync not available.',
+            lenses: lensesData.lenses
+        });
+    }
+
+    try {
+        const lensesBackup = await fs.readFile('lenses.json', 'utf8');
+        await fs.writeFile('lenses_backup.json', lensesBackup);
+
+        const result = await gitService.sync();
+        const lensesData = await loadLenses();
+
+        res.json({
+            success: true,
+            message: 'Lenses synced successfully',
+            lenses: lensesData.lenses
+        });
+    } catch (err) {
+        try {
+            await fs.copyFile('lenses_backup.json', 'lenses.json');
+        } catch (e) {}
+
+        const lensesData = await loadLenses();
+        res.json({
+            success: true,
+            localOnly: true,
+            message: 'Could not sync with remote, but lenses saved locally.',
+            note: err.message,
+            lenses: lensesData.lenses
+        });
     }
 });
 
