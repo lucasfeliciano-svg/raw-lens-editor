@@ -1,0 +1,9 @@
+📋 Summary
+Step	Command
+Clean everything	rm -rf node_modules dist
+Clear caches	npm cache clean --force
+Fresh install	npm install
+Test dev mode	npm run dev
+Build	npm run build:mac:arm64
+Let me know what happens after the clean rebuild!
+
