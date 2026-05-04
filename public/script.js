@@ -1039,8 +1039,23 @@ class LensManager {
                     ${this.truncateFileName(file.originalName)}
                 </div>
                 <div class="photo-meta">
-                    ${file.metadata?.cameraModel ? `<div><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</div>` : ''}
-                </div>
+    ${file.metadata && file.metadata.dateTime ?
+                    `<div><i class="far fa-clock"></i> ${new Date(file.metadata.dateTime).toLocaleString()}</div>` : ''}
+    ${file.metadata && file.metadata.cameraModel ?
+                    `<div><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</div>` : ''}
+    ${file.metadata && file.metadata.lensModel ?
+                    `<div><i class="fas fa-lens"></i> ${this.escapeHtml(file.metadata.lensModel)}</div>` :
+                    `<div style="color: #e67e22;"><i class="fas fa-exclamation-triangle"></i> No lens info</div>`}
+    ${file.metadata && file.metadata.focalLength ?
+                    `<div><i class="fas fa-arrows-alt-h"></i> ${file.metadata.focalLength}</div>` : ''}
+    ${file.metadata && file.metadata.aperture ?
+                    `<div><i class="fas fa-dot-circle"></i> ${file.metadata.aperture}</div>` : ''}
+    ${file.metadata && file.metadata.iso ?
+                    `<div><i class="fas fa-sun"></i> ISO ${file.metadata.iso}</div>` : ''}
+    ${file.metadata && file.metadata.exposureTime ?
+                    `<div><i class="fas fa-stopwatch"></i> ${file.metadata.exposureTime}s</div>` : ''}
+    <div><i class="fas fa-file"></i> ${this.formatFileSize(file.size)}</div>
+</div>
             </div>
         </div>
         `;

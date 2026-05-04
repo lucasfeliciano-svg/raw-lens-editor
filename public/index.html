@@ -18,6 +18,9 @@
                     <p class="subtitle">Add lens information to your Sony RAW files</p>
                 </div>
                 <div class="header-actions">
+                    <button id="syncBtn" class="btn btn-outline" title="Sync lenses with cloud">
+                        <i class="fas fa-cloud-download-alt"></i> Sync
+                    </button>
                     <button id="openLensManagerBtn" class="btn btn-outline">
                         <i class="fas fa-sliders-h"></i> Manage Lenses
                     </button>
@@ -61,19 +64,20 @@
 
                 <div class="settings-section">
                     <h2><i class="fas fa-cog"></i> Settings</h2>
-                    
+
                     <!-- Keep Original Filenames Toggle -->
                     <div class="setting-item">
                         <div>
                             <div class="setting-label">Keep Original Filenames</div>
-                            <div class="setting-description">Files will be saved with original names in downloads folder</div>
+                            <div class="setting-description">Files will be saved with original names in downloads folder
+                            </div>
                         </div>
                         <label class="toggle-switch">
                             <input type="checkbox" id="keepOriginalToggle" checked>
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-                    
+
                     <!-- Output Folder Selection -->
                     <div class="setting-item">
                         <div>
@@ -87,7 +91,13 @@
                 </div>
 
                 <div class="lens-selection">
-                    <h2><i class="fas fa-lens"></i> Select Lens</h2>
+                    <h2>
+                        <i class="fas fa-lens"></i> Select Lens
+                        <button id="reloadLensesBtn" title="Reload lenses from server"
+                            style="margin-left: 10px; background: none; border: none; color: #667eea; cursor: pointer; font-size: 0.85em;">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </h2>
                     <div class="lens-list" id="lensList">
                         <div class="empty-state">Loading lenses...</div>
                     </div>
@@ -192,14 +202,14 @@
             <span class="selection-count-wrapper">
                 <span id="selectionCount">0</span> photos selected
             </span>
-            
+
             <!-- Lens selector dropdown in selection bar -->
             <div class="selection-lens-selector">
                 <select id="selectionLensSelect" class="lens-select">
                     <option value="">-- Select Lens --</option>
                 </select>
             </div>
-            
+
             <button id="applyToSelectedBtn" class="btn primary small" disabled>
                 <i class="fas fa-magic"></i> Apply Lens
             </button>

@@ -1257,19 +1257,22 @@ app.post('/api/clear-uploads', async (req, res) => {
 // Clear downloads
 app.post('/api/clear-downloads', async (req, res) => {
     try {
-        const downloadDir = './downloads';
+        const downloadDir = app.locals.downloadsDir;
         if (fsSync.existsSync(downloadDir)) {
             const files = await fs.readdir(downloadDir);
+            let cleared = 0;
             for (const file of files) {
                 await fs.unlink(path.join(downloadDir, file)).catch(() => { });
+                cleared++;
             }
+            res.json({ success: true, message: `Cleared ${cleared} files`, cleared });
+        } else {
+            res.json({ success: true, message: 'No downloads to clear', cleared: 0 });
         }
-        res.json({ success: true, message: 'Downloads cleared' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to clear downloads' });
     }
 });
-
 // Cleanup temp
 app.post('/api/cleanup-temp', async (req, res) => {
     try {
