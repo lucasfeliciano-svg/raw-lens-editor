@@ -1395,19 +1395,19 @@ app.post('/api/sync/lenses', async (req, res) => {
     }
 
     try {
-        // Get the active lenses file path
-        const activeLensesPath = isElectronProduction
+        // The actual lenses file being used by the app
+        const actualLensesPath = isElectronProduction
             ? path.join(userDataPath, 'lenses.json')
             : path.join(__dirname, 'lenses.json');
         
-        // Get the repo lenses file path (for git)
+        // The repo lenses file that git will commit
         const repoLensesPath = path.join(__dirname, 'lenses.json');
         
-        // If they're different, copy active to repo
-        if (activeLensesPath !== repoLensesPath) {
-            const activeData = await fs.readFile(activeLensesPath, 'utf8');
-            await fs.writeFile(repoLensesPath, activeData);
-            console.log('✓ Copied active lenses to repo for sync');
+        // Always copy actual to repo before syncing
+        if (fsSync.existsSync(actualLensesPath)) {
+            const actualData = await fs.readFile(actualLensesPath, 'utf8');
+            await fs.writeFile(repoLensesPath, actualData);
+            console.log(`✓ Copied lenses from ${actualLensesPath} to repo`);
         }
         
         // Backup
@@ -1436,8 +1436,7 @@ app.post('/api/sync/lenses', async (req, res) => {
         res.json({
             success: true,
             localOnly: true,
-            message: 'Could not sync with remote, but lenses saved locally.',
-            note: err.message,
+            message: 'Could not sync with remote. ' + err.message,
             lenses: lensesData.lenses
         });
     }
