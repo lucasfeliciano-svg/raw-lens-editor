@@ -54,7 +54,7 @@
 }
 
 .lens-collection-card:hover {
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
 }
 
 .lens-collection-header {
@@ -152,7 +152,8 @@
     flex: 1;
     overflow-y: auto;
     padding-bottom: 20px;
-    min-height: 600px; /* Ensure minimum height */
+    min-height: 600px;
+    /* Ensure minimum height */
     max-height: none;
 }
 
@@ -161,7 +162,7 @@
     .main-content {
         flex-direction: column !important;
     }
-    
+
     .left-panel {
         width: 100% !important;
         min-width: 100% !important;
@@ -458,7 +459,8 @@ header h1 {
 }
 
 .photo-preview {
-    height: 180px; /* Slightly taller preview */
+    height: 180px;
+    /* Slightly taller preview */
     overflow: hidden;
     position: relative;
     flex-shrink: 0;
@@ -470,7 +472,8 @@ header h1 {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    image-orientation: from-image; /* This reads EXIF orientation */
+    image-orientation: from-image;
+    /* This reads EXIF orientation */
 }
 
 .photo-card:hover .photo-preview img {
@@ -491,9 +494,13 @@ header h1 {
     justify-content: center;
     font-size: 0.8em;
 }
+
+/* Sync button pulse */
 .btn.has-updates {
     background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%) !important;
     animation: pulse 2s infinite;
+    color: white !important;
+    border-color: transparent !important;
 }
 
 @keyframes pulse {
@@ -506,6 +513,7 @@ header h1 {
     background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
     display: block;
 }
+
 /* ===== PHOTO CARD METADATA COLORS ===== */
 .photo-meta div {
     padding: 2px 0;
@@ -652,6 +660,79 @@ header h1 {
     font-weight: bold;
 }
 
+.photo-meta {
+    color: #7f8c8d;
+    font-size: 1.05em;
+    line-height: 1.5;
+}
+
+.photo-meta div {
+    padding: 2px 0;
+}
+
+.meta-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 1em;
+    padding: 3px 0;
+}
+
+.meta-row span {
+    white-space: nowrap;
+}
+
+.meta-bottom {
+    font-size: 0.82em;
+    color: #7f8c8d;
+    border-top: 1px solid #e9ecef;
+    padding-top: 5px;
+    margin-top: 3px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Meta colors */
+.meta-lens {
+    color: #27ae60;
+    font-weight: 600;
+}
+
+.meta-no-lens {
+    color: #e67e22;
+    font-style: italic;
+}
+
+.meta-camera {
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+.meta-focal {
+    color: #8e44ad;
+}
+
+.meta-aperture {
+    color: #2980b9;
+}
+
+.meta-iso {
+    color: #c0392b;
+}
+
+.meta-shutter {
+    color: #d35400;
+}
+
+.meta-date {
+    color: #7f8c8d;
+}
+
+.meta-size {
+    color: #95a5a6;
+}
+
 .meta-row {
     display: flex;
     gap: 8px;
@@ -673,9 +754,17 @@ header h1 {
 }
 
 @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(243, 156, 18, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(243, 156, 18, 0); }
+    0% {
+        box-shadow: 0 0 0 0 rgba(243, 156, 18, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 10px rgba(243, 156, 18, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(243, 156, 18, 0);
+    }
 }
 
 /* ===== NOTIFICATION TYPES ===== */
@@ -693,6 +782,7 @@ header h1 {
     background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
     display: block;
 }
+
 .photo-info {
     padding: 12px;
     flex-grow: 1;
@@ -908,7 +998,10 @@ header h1 {
     }
 
     .preview-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+        min-height: 600px;
     }
 }
 

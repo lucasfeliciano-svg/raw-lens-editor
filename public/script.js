@@ -68,36 +68,36 @@ class LensManager {
     }
 
     async checkSyncStatus() {
-    try {
-        const response = await fetch('/api/sync/status');
-        const status = await response.json();
-        
-        const syncBtn = document.getElementById('syncBtn');
-        if (!syncBtn) return;
-        
-        // Always show the button, even if sync isn't available
-        syncBtn.style.display = '';
-        
-        if (!status.syncAvailable) {
-            syncBtn.style.opacity = '0.5';
-            syncBtn.title = 'Sync not available';
-            return;
-        }
-        
-        syncBtn.style.opacity = '1';
-        if (status.updatesAvailable) {
-            syncBtn.classList.add('has-updates');
-            syncBtn.innerHTML = `<i class="fas fa-cloud-download-alt"></i> Sync (${status.behindCount})`;
-        }
-    } catch (err) {
-        console.log('Sync check failed, showing button anyway:', err.message);
-        const syncBtn = document.getElementById('syncBtn');
-        if (syncBtn) {
+        try {
+            const response = await fetch('/api/sync/status');
+            const status = await response.json();
+
+            const syncBtn = document.getElementById('syncBtn');
+            if (!syncBtn) return;
+
+            // Always show the button, even if sync isn't available
             syncBtn.style.display = '';
-            syncBtn.style.opacity = '0.5';
+
+            if (!status.syncAvailable) {
+                syncBtn.style.opacity = '0.5';
+                syncBtn.title = 'Sync not available';
+                return;
+            }
+
+            syncBtn.style.opacity = '1';
+            if (status.updatesAvailable) {
+                syncBtn.classList.add('has-updates');
+                syncBtn.innerHTML = `<i class="fas fa-cloud-download-alt"></i> Sync (${status.behindCount})`;
+            }
+        } catch (err) {
+            console.log('Sync check failed, showing button anyway:', err.message);
+            const syncBtn = document.getElementById('syncBtn');
+            if (syncBtn) {
+                syncBtn.style.display = '';
+                syncBtn.style.opacity = '0.5';
+            }
         }
     }
-}
 
     async syncApp() {
         const syncBtn = document.getElementById('syncBtn');
@@ -1122,27 +1122,29 @@ class LensManager {
                 ${this.truncateFileName(file.originalName)}
             </div>
             <div class="photo-meta">
-                ${file.metadata && file.metadata.dateTime ?
-                    `<div class="meta-date"><i class="far fa-clock"></i> ${new Date(file.metadata.dateTime).toLocaleString()}</div>` : ''}
-                <div class="meta-row">
-                    ${file.metadata && file.metadata.cameraModel ?
+    <div class="meta-row">
+        ${file.metadata && file.metadata.cameraModel ?
                     `<span class="meta-camera"><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</span>` : ''}
-                    ${file.metadata && file.metadata.exposureTime ?
-                    `<span class="meta-shutter"><i class="fas fa-stopwatch"></i> ${file.metadata.exposureTime}s</span>` : ''}
-                </div>
-                <div class="meta-row">
-                    ${file.metadata && file.metadata.focalLength ?
+        ${file.metadata && file.metadata.lensModel ?
+                    `<span class="meta-lens"><i class="fas fa-lens"></i> ${this.escapeHtml(file.metadata.lensModel)}</span>` :
+                    `<span class="meta-no-lens"><i class="fas fa-exclamation-triangle"></i> No lens</span>`}
+    </div>
+    <div class="meta-row">
+        ${file.metadata && file.metadata.focalLength ?
                     `<span class="meta-focal"><i class="fas fa-arrows-alt-h"></i> ${file.metadata.focalLength}</span>` : ''}
-                    ${file.metadata && file.metadata.aperture ?
+        ${file.metadata && file.metadata.aperture ?
                     `<span class="meta-aperture"><i class="fas fa-dot-circle"></i> ${file.metadata.aperture}</span>` : ''}
-                    ${file.metadata && file.metadata.iso ?
+        ${file.metadata && file.metadata.iso ?
                     `<span class="meta-iso"><i class="fas fa-sun"></i> ISO ${file.metadata.iso}</span>` : ''}
-                </div>
-                ${file.metadata && file.metadata.lensModel ?
-                    `<div class="meta-lens"><i class="fas fa-lens"></i> ${this.escapeHtml(file.metadata.lensModel)}</div>` :
-                    `<div class="meta-no-lens"><i class="fas fa-exclamation-triangle"></i> No lens info</div>`}
-                <div class="meta-size"><i class="fas fa-file"></i> ${this.formatFileSize(file.size)}</div>
-            </div>
+        ${file.metadata && file.metadata.exposureTime ?
+                    `<span class="meta-shutter"><i class="fas fa-stopwatch"></i> ${file.metadata.exposureTime}s</span>` : ''}
+    </div>
+    <div class="meta-row meta-bottom">
+        ${file.metadata && file.metadata.dateTime ?
+                    `<span class="meta-date"><i class="far fa-clock"></i> ${new Date(file.metadata.dateTime).toLocaleString()}</span>` : ''}
+        <span class="meta-size"><i class="fas fa-file"></i> ${this.formatFileSize(file.size)}</span>
+    </div>
+</div>
         </div>
     </div>
     `;

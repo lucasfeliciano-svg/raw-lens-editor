@@ -716,6 +716,7 @@ const createPlaceholderImage = async (imagePath, size, label) => {
 };
 
 // Generate preview for ARW files - handles portrait rotation properly
+// Generate preview for ARW files - handles portrait rotation properly
 const generateARWPreview = async (arwPath, previewPath, size = 300) => {
     try {
         const dir = path.dirname(previewPath);
@@ -742,7 +743,7 @@ const generateARWPreview = async (arwPath, previewPath, size = 300) => {
             return false;
         }
 
-        // Step 2: Get orientation and apply correct rotation
+        // Step 2: Get orientation
         let orientation = 1;
         try {
             const { stdout } = await execPromise(`"${EXIFTOOL_CMD}" -Orientation# -j "${arwPath}"`);
@@ -750,37 +751,77 @@ const generateARWPreview = async (arwPath, previewPath, size = 300) => {
             orientation = parseInt(data[0]?.Orientation) || 1;
             console.log(`📐 Detected Orientation: ${orientation}`);
         } catch (err) {
-            console.log('Could not read orientation, assuming landscape (1)');
+            console.log('Could not read orientation, assuming normal (1)');
         }
 
-        // Orientation mapping:
-        // 1 = Normal (no rotation)
-        // 3 = Rotate 180° (upside down)
-        // 6 = Rotate 90° CW (portrait - camera turned clockwise)
-        // 8 = Rotate 90° CCW (portrait - camera turned counter-clockwise)
+        // CORRECTED Orientation mapping:
+        // 1 = Normal (no rotation needed)
+        // 2 = Mirrored horizontally
+        // 3 = Rotated 180°
+        // 4 = Mirrored vertically
+        // 5 = Mirrored horizontally + Rotated 270° CW
+        // 6 = Rotated 90° CW (camera turned clockwise = portrait)
+        // 7 = Mirrored horizontally + Rotated 90° CW
+        // 8 = Rotated 270° CW (camera turned counter-clockwise = portrait)
 
         let rotationDegrees = 0;
-        if (orientation === 3) {
-            rotationDegrees = 180;
-            // console.log('↻ Applying 180° rotation (upside down fix)');
-        } else if (orientation === 6) {
-            rotationDegrees = 270;
-            // console.log('↻ Applying 90° clockwise rotation (portrait fix)');
-        } else if (orientation === 8) {
-            rotationDegrees = 270;
-            // console.log('↻ Applying 270° clockwise / 90° CCW rotation (portrait fix)');
-        } else {
-            console.log('✓ Landscape - no rotation needed');
+        let needsFlip = false;
+
+        switch (orientation) {
+            case 1:
+                // Normal - no change
+                break;
+            case 2:
+                needsFlip = true;
+                break;
+            case 3:
+                rotationDegrees = 180;
+                break;
+            case 4:
+                needsFlip = true;
+                break;
+            case 5:
+                rotationDegrees = 90;
+                needsFlip = true;
+                break;
+            case 6:
+                rotationDegrees = 90;  // Portrait - rotate 90° clockwise
+                break;
+            case 7:
+                rotationDegrees = 270;
+                needsFlip = true;
+                break;
+            case 8:
+                rotationDegrees = 270;  // Portrait - rotate 270° clockwise
+                break;
+            default:
+                console.log(`Unknown orientation: ${orientation}, no rotation applied`);
         }
 
-        // Step 3: Apply rotation if needed
-        if (rotationDegrees > 0) {
-            await execPromise(`sips -r ${rotationDegrees} "${tempFile}" --out "${previewPath}"`);
-            await execPromise(`"${EXIFTOOL_CMD}" -overwrite_original -Orientation=1 "${previewPath}"`);
-        } else {
-            await fs.copyFile(tempFile, previewPath);
-        }
+        console.log(`🔄 Applying: rotate=${rotationDegrees}°, flip=${needsFlip}`);
 
+        // Step 3: Apply rotation using sharp (more reliable than sips)
+        if (rotationDegrees > 0 || needsFlip) {
+            let sharpInstance = sharp(tempFile);
+            
+            if (rotationDegrees > 0) {
+                sharpInstance = sharpInstance.rotate(rotationDegrees);
+            }
+            if (needsFlip) {
+                sharpInstance = sharpInstance.flop(); // horizontal flip
+            }
+            
+            await sharpInstance
+                .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+                .jpeg({ quality: 85 })
+                .toFile(previewPath);
+        } else {
+            // No rotation needed, just resize
+            await sharp(tempFile)
+                .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+                .jpeg({ quality: 85 })
+                .toFile(previewPath);
+        }
 
         // Clean up temp file
         await fs.unlink(tempFile).catch(() => { });
@@ -790,16 +831,14 @@ const generateARWPreview = async (arwPath, previewPath, size = 300) => {
     } catch (err) {
         console.error(`Preview generation error:`, err.message);
 
-        // Fallback: try to salvage whatever we can
+        // Fallback: try to salvage
         try {
             const tempFile = previewPath + '.temp.jpg';
             if (fsSync.existsSync(tempFile)) {
                 await fs.copyFile(tempFile, previewPath);
                 return true;
             }
-        } catch (e) {
-            // Give up
-        }
+        } catch (e) {}
 
         await createPlaceholderImage(previewPath, size, 'ARW');
         return false;
