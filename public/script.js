@@ -88,39 +88,39 @@ class LensManager {
     }
 
     async syncApp() {
-    const syncBtn = document.getElementById('syncBtn');
-    if (!syncBtn) return;
+        const syncBtn = document.getElementById('syncBtn');
+        if (!syncBtn) return;
 
-    const originalHTML = syncBtn.innerHTML;
-    syncBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Syncing...';
-    syncBtn.disabled = true;
+        const originalHTML = syncBtn.innerHTML;
+        syncBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Syncing...';
+        syncBtn.disabled = true;
 
-    try {
-        const response = await fetch('/api/sync/lenses', { method: 'POST' });
-        const result = await response.json();
+        try {
+            const response = await fetch('/api/sync/lenses', { method: 'POST' });
+            const result = await response.json();
 
-        if (result.lenses) {
-            this.lenses = result.lenses;
-            this.renderLenses();
-            this.populateSelectionBarLenses();
-        }
+            if (result.lenses) {
+                this.lenses = result.lenses;
+                this.renderLenses();
+                this.populateSelectionBarLenses();
+            }
 
-        syncBtn.classList.remove('has-updates');
-        syncBtn.innerHTML = '<i class="fas fa-check-circle"></i> Synced';
-        this.showNotification(result.message || 'Synced!', 'success');
-    } catch (err) {
-        syncBtn.classList.remove('has-updates');
-        syncBtn.innerHTML = originalHTML;
-        this.showNotification('Sync failed: ' + err.message, 'error');
-    } finally {
-        syncBtn.disabled = false;
-        // Always restore after 3 seconds
-        setTimeout(() => {
+            syncBtn.classList.remove('has-updates');
+            syncBtn.innerHTML = '<i class="fas fa-check-circle"></i> Synced';
+            this.showNotification(result.message || 'Synced!', 'success');
+        } catch (err) {
+            syncBtn.classList.remove('has-updates');
             syncBtn.innerHTML = originalHTML;
+            this.showNotification('Sync failed: ' + err.message, 'error');
+        } finally {
             syncBtn.disabled = false;
-        }, 3000);
+            // Always restore after 3 seconds
+            setTimeout(() => {
+                syncBtn.innerHTML = originalHTML;
+                syncBtn.disabled = false;
+            }, 3000);
+        }
     }
-}
 
     async refreshLenses() {
         await this.loadLenses();
@@ -300,6 +300,9 @@ class LensManager {
                 fileInput.value = '';
             }
         });
+
+
+        document.getElementById('passthroughBtn').addEventListener('click', () => this.applyPassthrough());
 
         const selectionLensSelect = document.getElementById('selectionLensSelect');
         if (selectionLensSelect) {
@@ -774,6 +777,71 @@ class LensManager {
         this.renderPreviews();
     }
 
+    async applyPassthrough() {
+        if (this.selectedFiles.size === 0) return;
+
+        if (!confirm(`Copy ${this.selectedFiles.size} selected photo${this.selectedFiles.size !== 1 ? 's' : ''} without changing lens info?`)) return;
+
+        const selectedFileNames = Array.from(this.selectedFiles).map(index =>
+            this.uploadedFiles[index].uploadedName
+        );
+
+        const processingSection = document.getElementById('processingSection');
+        const progressFill = document.getElementById('progressFill');
+        const processingInfo = document.getElementById('processingInfo');
+
+        processingSection.style.display = 'block';
+        progressFill.style.width = '0%';
+        processingInfo.innerHTML = `<i class="fas fa-sync fa-spin"></i> Copying ${this.selectedFiles.size} file(s)...`;
+
+        let completed = 0;
+
+        for (const fileName of selectedFileNames) {
+            try {
+                const response = await fetch('/api/passthrough', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fileName: fileName,
+                        keepOriginalName: this.keepOriginalName
+                    })
+                });
+
+                const result = await response.json();
+                if (!result.success) throw new Error(result.error);
+
+                completed++;
+                progressFill.style.width = `${(completed / selectedFileNames.length) * 100}%`;
+
+            } catch (err) {
+                console.error('Passthrough error:', err);
+            }
+        }
+
+        // ... after the for loop ...
+
+        processingInfo.innerHTML = `<i class="fas fa-check-circle"></i> ${completed} file(s) copied!`;
+        this.showNotification(`${completed} file(s) copied without lens changes!`, 'success');
+
+        // Remove processed files from the list
+        const processedIndices = Array.from(this.selectedFiles).sort((a, b) => b - a);
+        for (const index of processedIndices) {
+            this.uploadedFiles.splice(index, 1);
+        }
+
+        this.selectedFiles.clear();
+        this.lastSelectedIndex = -1;
+        this.renderPreviews();
+        this.updateFileCount();
+        this.updateSelectionBar();
+        this.updateApplyButton();
+
+        setTimeout(() => {
+            processingSection.style.display = 'none';
+        }, 2000);
+
+    }
+
     async generatePreviewsInParallel(successfulUploads, fileStatuses, fileListContainer, progressText, progressFill) {
         const totalPreviews = successfulUploads.length;
         let completedPreviews = 0;
@@ -1008,13 +1076,13 @@ class LensManager {
 
         if (this.uploadedFiles.length === 0) {
             previewGrid.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-images fa-3x"></i>
-                <p>No photos uploaded yet</p>
-                <p>Upload Sony RAW (.arw) files to get started</p>
-                <p class="upload-hint">Shift+click to select multiple photos</p>
-            </div>
-        `;
+        <div class="empty-state">
+            <i class="fas fa-images fa-3x"></i>
+            <p>No photos uploaded yet</p>
+            <p>Upload Sony RAW (.arw) files to get started</p>
+            <p class="upload-hint">Shift+click to select multiple photos</p>
+        </div>
+    `;
             this.updateSelectionBar();
             return;
         }
@@ -1026,42 +1094,46 @@ class LensManager {
             const isLoading = !hasPreview;
 
             return `
-        <div class="photo-card ${isSelected ? 'selected' : ''}" data-index="${index}">
-            <div class="photo-preview ${isLoading ? 'preview-loading' : ''}" data-index="${index}">
-                ${file.metadata?.hasLensInfo ? '<div class="lens-warning" title="Already has lens info"><i class="fas fa-times"></i></div>' : ''}
-                <img src="${previewUrl}" alt="${this.escapeHtml(file.originalName)}" 
-                     style="opacity: ${hasPreview ? '1' : '0.6'}; transition: opacity 0.3s;">
-                ${isLoading ? '<div class="preview-loader"><i class="fas fa-spinner fa-spin"></i></div>' : ''}
-                <div class="checkbox ${isSelected ? 'checked' : ''}" data-index="${index}"></div>
-                <button class="remove-btn" data-index="${index}" title="Remove from list">
-                    <i class="fas fa-trash"></i>
-                </button>
+    <div class="photo-card ${isSelected ? 'selected' : ''}" data-index="${index}">
+        <div class="photo-preview ${isLoading ? 'preview-loading' : ''}" data-index="${index}">
+            ${file.metadata?.hasLensInfo ? '<div class="lens-warning" title="Already has lens info"><i class="fas fa-times"></i></div>' : ''}
+            <img src="${previewUrl}" alt="${this.escapeHtml(file.originalName)}" 
+                 style="opacity: ${hasPreview ? '1' : '0.6'}; transition: opacity 0.3s;">
+            ${isLoading ? '<div class="preview-loader"><i class="fas fa-spinner fa-spin"></i></div>' : ''}
+            <div class="checkbox ${isSelected ? 'checked' : ''}" data-index="${index}"></div>
+            <button class="remove-btn" data-index="${index}" title="Remove from list">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+        <div class="photo-info">
+            <div class="photo-name" title="${this.escapeHtml(file.originalName)}">
+                ${this.truncateFileName(file.originalName)}
             </div>
-            <div class="photo-info">
-                <div class="photo-name" title="${this.escapeHtml(file.originalName)}">
-                    ${this.truncateFileName(file.originalName)}
+            <div class="photo-meta">
+                ${file.metadata && file.metadata.dateTime ?
+                    `<div class="meta-date"><i class="far fa-clock"></i> ${new Date(file.metadata.dateTime).toLocaleString()}</div>` : ''}
+                <div class="meta-row">
+                    ${file.metadata && file.metadata.cameraModel ?
+                    `<span class="meta-camera"><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</span>` : ''}
+                    ${file.metadata && file.metadata.exposureTime ?
+                    `<span class="meta-shutter"><i class="fas fa-stopwatch"></i> ${file.metadata.exposureTime}s</span>` : ''}
                 </div>
-                <div class="photo-meta">
-    ${file.metadata && file.metadata.dateTime ? 
-        `<div class="meta-date"><i class="far fa-clock"></i> ${new Date(file.metadata.dateTime).toLocaleString()}</div>` : ''}
-    ${file.metadata && file.metadata.cameraModel ? 
-        `<div class="meta-camera"><i class="fas fa-camera"></i> ${this.escapeHtml(file.metadata.cameraModel)}</div>` : ''}
-    ${file.metadata && file.metadata.lensModel ? 
-        `<div class="meta-lens"><i class="fas fa-lens"></i> ${this.escapeHtml(file.metadata.lensModel)}</div>` : 
-        `<div class="meta-no-lens"><i class="fas fa-exclamation-triangle"></i> No lens info</div>`}
-    ${file.metadata && file.metadata.focalLength ? 
-        `<div class="meta-focal"><i class="fas fa-arrows-alt-h"></i> ${file.metadata.focalLength}</div>` : ''}
-    ${file.metadata && file.metadata.aperture ? 
-        `<div class="meta-aperture"><i class="fas fa-dot-circle"></i> ${file.metadata.aperture}</div>` : ''}
-    ${file.metadata && file.metadata.iso ? 
-        `<div class="meta-iso"><i class="fas fa-sun"></i> ISO ${file.metadata.iso}</div>` : ''}
-    ${file.metadata && file.metadata.exposureTime ? 
-        `<div class="meta-shutter"><i class="fas fa-stopwatch"></i> ${file.metadata.exposureTime}s</div>` : ''}
-    <div class="meta-size"><i class="fas fa-file"></i> ${this.formatFileSize(file.size)}</div>
-</div>
+                <div class="meta-row">
+                    ${file.metadata && file.metadata.focalLength ?
+                    `<span class="meta-focal"><i class="fas fa-arrows-alt-h"></i> ${file.metadata.focalLength}</span>` : ''}
+                    ${file.metadata && file.metadata.aperture ?
+                    `<span class="meta-aperture"><i class="fas fa-dot-circle"></i> ${file.metadata.aperture}</span>` : ''}
+                    ${file.metadata && file.metadata.iso ?
+                    `<span class="meta-iso"><i class="fas fa-sun"></i> ISO ${file.metadata.iso}</span>` : ''}
+                </div>
+                ${file.metadata && file.metadata.lensModel ?
+                    `<div class="meta-lens"><i class="fas fa-lens"></i> ${this.escapeHtml(file.metadata.lensModel)}</div>` :
+                    `<div class="meta-no-lens"><i class="fas fa-exclamation-triangle"></i> No lens info</div>`}
+                <div class="meta-size"><i class="fas fa-file"></i> ${this.formatFileSize(file.size)}</div>
             </div>
         </div>
-        `;
+    </div>
+    `;
         }).join('');
 
         this.attachPreviewEventListeners();
@@ -1272,6 +1344,7 @@ class LensManager {
     updateApplyButton() {
         const mainApplyBtn = document.getElementById('applyBtn');
         const selectionApplyBtn = document.getElementById('applyToSelectedBtn');
+        const passthroughBtn = document.getElementById('passthroughBtn');
 
         const hasSelection = this.selectedFiles.size > 0;
         const hasLens = this.selectedLens !== null;
@@ -1279,9 +1352,11 @@ class LensManager {
         if (mainApplyBtn) {
             mainApplyBtn.disabled = !hasSelection || !hasLens;
         }
-
         if (selectionApplyBtn) {
             selectionApplyBtn.disabled = !hasSelection || !hasLens;
+        }
+        if (passthroughBtn) {
+            passthroughBtn.disabled = !hasSelection; // Only needs selection, no lens required
         }
     }
 

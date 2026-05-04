@@ -652,6 +652,18 @@ header h1 {
     font-weight: bold;
 }
 
+.meta-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 1em;
+    padding: 1px 0;
+}
+
+.meta-row span {
+    white-space: nowrap;
+}
+
 /* ===== SYNC BUTTON PULSE ===== */
 .btn.has-updates {
     background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%) !important;

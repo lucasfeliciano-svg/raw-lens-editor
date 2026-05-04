@@ -12,7 +12,7 @@ const execPromise = promisify(exec);
 const os = require('os');
 const PDFDocument = require('pdfkit');
 const GitService = require('./git-service');
-const gitService = new GitService(__dirname);
+const gitService = new GitService(path.join(__dirname, 'lens-data-repo'));
 
 gitService.initialize().catch(err => {
     console.log('Git service not available, running in local mode');
@@ -282,39 +282,39 @@ app.get('/api/lenses/report', async (req, res) => {
             }
         });
 
-        
-                // ===== INDIVIDUAL LENS PAGES (300x300 IMAGES WITH WEBP SUPPORT) =====
+
+        // ===== INDIVIDUAL LENS PAGES (300x300 IMAGES WITH WEBP SUPPORT) =====
         for (const lens of lenses) {
             doc.addPage();
-            
+
             // Header
             doc.rect(0, 0, doc.page.width, 55)
-               .fill('#667eea');
-            
+                .fill('#667eea');
+
             doc.fontSize(16)
-               .font('Helvetica-Bold')
-               .fillColor('white')
-               .text(lens.name.substring(0, 40), 35, 18);
-            
+                .font('Helvetica-Bold')
+                .fillColor('white')
+                .text(lens.name.substring(0, 40), 35, 18);
+
             doc.fontSize(10)
-               .font('Helvetica')
-               .text(`${lens.mount || ''}  •  ${lens.focalLength || ''}  •  ${lens.aperture || ''}`, 35, 38);
-            
+                .font('Helvetica')
+                .text(`${lens.mount || ''}  •  ${lens.focalLength || ''}  •  ${lens.aperture || ''}`, 35, 38);
+
             // Larger image - 300x300
             const imageSize = 300;
             const imageX = 35;
             const imageY = 75;
-            
+
             // Draw decorative frame
             doc.rect(imageX - 3, imageY - 3, imageSize + 6, imageSize + 6)
-               .fill('#e9ecef');
+                .fill('#e9ecef');
             doc.rect(imageX - 1, imageY - 1, imageSize + 2, imageSize + 2)
-               .fill('white');
+                .fill('white');
             doc.rect(imageX, imageY, imageSize, imageSize)
-               .fill('#f8f9fa');
-            
+                .fill('#f8f9fa');
+
             let imageDisplayed = false;
-            
+
             // Helper: Check if file is a valid image
             const isValidImage = (filePath) => {
                 try {
@@ -326,28 +326,28 @@ app.get('/api/lenses/report', async (req, res) => {
                     return false;
                 }
             };
-            
+
             // Helper: Convert WebP to JPEG if needed
             const getDisplayableImagePath = async (inputPath) => {
                 try {
                     const ext = path.extname(inputPath).toLowerCase();
-                    
+
                     // If it's already JPEG or PNG, return as-is
                     if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
                         return inputPath;
                     }
-                    
+
                     // For WebP or other formats, convert to JPEG
                     const tempDir = path.join(app.locals.previewsDir, 'temp');
                     await fs.mkdir(tempDir, { recursive: true });
-                    
+
                     const tempFile = path.join(tempDir, `lens-${Date.now()}.jpg`);
-                    
+
                     await sharp(inputPath)
                         .resize(imageSize, imageSize, { fit: 'inside', withoutEnlargement: true })
                         .jpeg({ quality: 90 })
                         .toFile(tempFile);
-                    
+
                     console.log(`  ✓ Converted ${ext} to JPEG`);
                     return tempFile;
                 } catch (err) {
@@ -355,15 +355,15 @@ app.get('/api/lenses/report', async (req, res) => {
                     return null;
                 }
             };
-            
+
             const tryImagePaths = [];
             if (lens.primaryImage) tryImagePaths.push(lens.primaryImage);
             if (lens.imageUrl) tryImagePaths.push(lens.imageUrl);
-            
+
             for (const imgPath of tryImagePaths) {
                 if (imageDisplayed) break;
                 if (!imgPath || typeof imgPath !== 'string') continue;
-                
+
                 try {
                     const filename = path.basename(imgPath);
                     const possiblePaths = [
@@ -371,25 +371,25 @@ app.get('/api/lenses/report', async (req, res) => {
                         path.join(__dirname, 'public', 'lens-images', filename),
                         path.join(userDataPath, 'lens-images', filename)
                     ];
-                    
+
                     for (const testPath of possiblePaths) {
                         if (isValidImage(testPath)) {
                             // Convert if needed (handles WebP)
                             const displayPath = await getDisplayableImagePath(testPath);
-                            
+
                             if (displayPath && fsSync.existsSync(displayPath)) {
                                 // Get image dimensions to center it
                                 const metadata = await sharp(displayPath).metadata();
-                                
+
                                 // Calculate centering offsets
                                 const imgWidth = metadata.width;
                                 const imgHeight = metadata.height;
-                                
+
                                 let offsetX = imageX;
                                 let offsetY = imageY;
                                 let finalWidth = imageSize;
                                 let finalHeight = imageSize;
-                                
+
                                 // Center the image within the frame
                                 if (imgWidth > imgHeight) {
                                     finalHeight = (imgHeight / imgWidth) * imageSize;
@@ -398,12 +398,12 @@ app.get('/api/lenses/report', async (req, res) => {
                                     finalWidth = (imgWidth / imgHeight) * imageSize;
                                     offsetX = imageX + (imageSize - finalWidth) / 2;
                                 }
-                                
-                                doc.image(displayPath, offsetX, offsetY, { 
-                                    width: finalWidth, 
+
+                                doc.image(displayPath, offsetX, offsetY, {
+                                    width: finalWidth,
                                     height: finalHeight
                                 });
-                                
+
                                 imageDisplayed = true;
                                 console.log(`✓ Displayed image: ${filename}`);
                                 break;
@@ -414,31 +414,31 @@ app.get('/api/lenses/report', async (req, res) => {
                     console.log(`  Image error:`, err.message);
                 }
             }
-            
+
             if (!imageDisplayed) {
                 // Larger placeholder
                 doc.fontSize(80)
-                   .fillColor('#bdc3c7')
-                   .text('📷', imageX + 85, imageY + 90);
+                    .fillColor('#bdc3c7')
+                    .text('📷', imageX + 85, imageY + 90);
                 doc.fontSize(12)
-                   .fillColor('#95a5a6')
-                   .text('No image available', imageX, imageY + imageSize + 5, { 
-                       width: imageSize, 
-                       align: 'center' 
-                   });
+                    .fillColor('#95a5a6')
+                    .text('No image available', imageX, imageY + imageSize + 5, {
+                        width: imageSize,
+                        align: 'center'
+                    });
             }
-            
+
             // Details section - below the image since it's now larger
             const detailsY = imageY + imageSize + 20;
-            
+
             doc.fontSize(10).font('Helvetica');
-            
+
             // Two-column layout for details
             const leftColX = 35;
             const rightColX = 300;
             let leftY = detailsY;
             let rightY = detailsY;
-            
+
             const detailItems = [
                 { label: 'Maker', value: lens.maker },
                 { label: 'Mount', value: lens.mount },
@@ -447,24 +447,24 @@ app.get('/api/lenses/report', async (req, res) => {
                 { label: 'Purchase Date', value: lens.purchaseDate },
                 { label: 'Purchase Price', value: lens.purchasePrice ? `$${lens.purchasePrice}` : null }
             ].filter(item => item.value);
-            
+
             detailItems.forEach((item, i) => {
                 const xPos = i < 3 ? leftColX : rightColX;
                 const yPos = i < 3 ? leftY : rightY;
-                
+
                 doc.fillColor('#7f8c8d').text(`${item.label}:`, xPos, yPos, { continued: true });
                 doc.fillColor('#2c3e50').text(` ${item.value}`);
-                
+
                 if (i < 3) {
                     leftY += 18;
                 } else {
                     rightY += 18;
                 }
             });
-            
+
             // Technical Specifications
             const specsY = Math.max(leftY, rightY) + 15;
-            
+
             const specFields = [
                 { label: 'Filter Thread', value: lens.filterThread },
                 { label: 'Weight', value: lens.weight },
@@ -474,28 +474,28 @@ app.get('/api/lenses/report', async (req, res) => {
                 { label: 'Max Magnification', value: lens.maxMagnification },
                 { label: 'Hood Model', value: lens.hoodModel }
             ];
-            
+
             const populatedSpecs = specFields.filter(s => s.value && s.value.trim() !== '');
-            
+
             if (populatedSpecs.length > 0) {
                 doc.rect(35, specsY, 525, 75)
-                   .fill('#f8f9fa')
-                   .stroke('#e9ecef');
-                
+                    .fill('#f8f9fa')
+                    .stroke('#e9ecef');
+
                 doc.fontSize(11)
-                   .font('Helvetica-Bold')
-                   .fillColor('#2c3e50')
-                   .text('Technical Specifications', 50, specsY + 12);
-                
+                    .font('Helvetica-Bold')
+                    .fillColor('#2c3e50')
+                    .text('Technical Specifications', 50, specsY + 12);
+
                 doc.fontSize(9).font('Helvetica');
-                
+
                 let specX = 50;
                 let specRowY = specsY + 32;
-                
+
                 populatedSpecs.forEach((item, i) => {
                     doc.fillColor('#7f8c8d').text(`${item.label}:`, specX, specRowY, { continued: true });
                     doc.fillColor('#2c3e50').text(` ${item.value}`);
-                    
+
                     if (i % 2 === 0) {
                         specX = 300;
                     } else {
@@ -504,17 +504,17 @@ app.get('/api/lenses/report', async (req, res) => {
                     }
                 });
             }
-            
+
             // Footer at Y=780
             doc.fontSize(7)
-               .fillColor('#95a5a6')
-               .text(
-                   `Lens ID: ${lens.id} | Created: ${lens.createdAt ? new Date(lens.createdAt).toLocaleDateString() : 'N/A'}`,
-                   35, 780,
-                   { align: 'center', width: 525 }
-               );
+                .fillColor('#95a5a6')
+                .text(
+                    `Lens ID: ${lens.id} | Created: ${lens.createdAt ? new Date(lens.createdAt).toLocaleDateString() : 'N/A'}`,
+                    35, 780,
+                    { align: 'center', width: 525 }
+                );
         }
-        
+
         doc.end();
 
     } catch (err) {
@@ -580,7 +580,7 @@ const loadLenses = async () => {
     if (isElectronProduction) {
         lensesPath = path.join(userDataPath, 'lenses.json');
         if (!fsSync.existsSync(lensesPath)) {
-            console.log("the lens path is: "+__dirname);
+            console.log("the lens path is: " + __dirname);
             const packagedLensesPath = path.join(__dirname, 'lenses.json');
             if (fsSync.existsSync(packagedLensesPath)) {
                 await fs.copyFile(packagedLensesPath, lensesPath);
@@ -588,7 +588,7 @@ const loadLenses = async () => {
             }
         }
     } else {
-        console.log("the lens path is: "+__dirname);
+        console.log("the lens path is: " + __dirname);
         lensesPath = path.join(__dirname, 'lenses.json');
     }
 
@@ -1044,8 +1044,8 @@ app.post('/api/upload', upload.array('photos', 100), async (req, res) => {
             app.locals.uploadedFiles.push(fileInfo);
         }
 
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             files: uploadedFiles,
             message: `Successfully uploaded ${files.length} file(s)`
         });
@@ -1396,22 +1396,19 @@ app.post('/api/sync/lenses', async (req, res) => {
 
     try {
         // The actual lenses file being used by the app
-        const actualLensesPath = isElectronProduction
+        const activeLensesPath = isElectronProduction
             ? path.join(userDataPath, 'lenses.json')
             : path.join(__dirname, 'lenses.json');
-        
-        // The repo lenses file that git will commit
-        const repoLensesPath = path.join(__dirname, 'lenses.json');
-        
-        // Always copy actual to repo before syncing
-        if (fsSync.existsSync(actualLensesPath)) {
-            const actualData = await fs.readFile(actualLensesPath, 'utf8');
-            await fs.writeFile(repoLensesPath, actualData);
-            console.log(`✓ Copied lenses from ${actualLensesPath} to repo`);
+
+        const lensRepoPath = path.join(__dirname, 'lens-data-repo', 'lenses.json');
+
+        if (fsSync.existsSync(activeLensesPath)) {
+            await fs.copyFile(activeLensesPath, lensRepoPath);
+            console.log('✓ Copied lenses to lens-data-repo for sync');
         }
-        
+
         // Backup
-        const lensesBackup = await fs.readFile(repoLensesPath, 'utf8');
+        const lensesBackup = await fs.readFile(lensRepoPath, 'utf8');
         await fs.writeFile(path.join(__dirname, 'lenses_backup.json'), lensesBackup);
 
         // Sync with git
@@ -1430,7 +1427,7 @@ app.post('/api/sync/lenses', async (req, res) => {
             if (fsSync.existsSync(backupPath)) {
                 await fs.copyFile(backupPath, path.join(__dirname, 'lenses.json'));
             }
-        } catch (e) {}
+        } catch (e) { }
 
         const lensesData = await loadLenses();
         res.json({
@@ -1442,6 +1439,46 @@ app.post('/api/sync/lenses', async (req, res) => {
     }
 });
 
+// Passthrough - copy file without changing EXIF
+app.post('/api/passthrough', async (req, res) => {
+    try {
+        const { fileName, keepOriginalName = true } = req.body;
+
+        if (!fileName) {
+            return res.status(400).json({ error: 'Missing file' });
+        }
+
+        const filePath = path.join(app.locals.uploadsDir, fileName);
+        if (!fsSync.existsSync(filePath)) {
+            return res.status(404).json({ error: 'File not found' });
+        }
+
+        const uploadedFile = app.locals.uploadedFiles.find(f => f.uploadedName === fileName);
+        const originalName = uploadedFile?.originalName || fileName;
+        const safeOriginalName = originalName.replace(/[^a-zA-Z0-9.()[\]# -]/g, '_');
+
+        let outputFilename = safeOriginalName;
+        let outputPath = path.join(app.locals.downloadsDir, outputFilename);
+
+        let counter = 1;
+        while (fsSync.existsSync(outputPath)) {
+            const nameWithoutExt = path.basename(safeOriginalName, path.extname(safeOriginalName));
+            const ext = path.extname(safeOriginalName);
+            outputFilename = `${nameWithoutExt}_${counter}${ext}`;
+            outputPath = path.join(app.locals.downloadsDir, outputFilename);
+            counter++;
+        }
+
+        // Just copy, no EXIF changes
+        await fs.copyFile(filePath, outputPath);
+
+        res.json({ success: true, outputFilename });
+
+    } catch (err) {
+        console.error('Passthrough error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 // ===== PAGE ROUTES =====
 app.get('/lens-manager', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'lens-manager.html'));

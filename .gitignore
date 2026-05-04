@@ -3,5 +3,6 @@ build/
 release/
 out/
 node_modules/
+lens-data-repo/
 *.dmg
 *.zip

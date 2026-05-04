@@ -87,68 +87,66 @@ class GitService {
     }
 
     async sync() {
-        if (!this.gitAvailable) {
-            return {
-                success: false,
-                localOnly: true,
-                message: 'Git not available - running in local mode'
-            };
-        }
+    if (!this.gitAvailable) {
+        return {
+            success: false,
+            localOnly: true,
+            message: 'Git not available - running in local mode'
+        };
+    }
 
-        return new Promise((resolve, reject) => {
-            // Step 1: Stash local changes
-            exec('git stash', {
+    return new Promise((resolve, reject) => {
+        // Step 1: Stash local changes
+        exec('git stash', {
+            cwd: this.repoPath,
+            timeout: 10000
+        }, (stashErr) => {
+            // Step 2: Pull latest (NO --rebase)
+            exec('git pull origin main', {
                 cwd: this.repoPath,
-                timeout: 10000
-            }, (stashErr) => {
-                // Step 2: Pull latest from remote
-                exec('git pull --rebase origin main', {
+                maxBuffer: 1024 * 1024 * 10,
+                timeout: 30000
+            }, (pullErr, pullStdout, pullStderr) => {
+                if (pullErr) {
+                    exec('git stash pop', { cwd: this.repoPath }, () => {});
+                    reject(new Error(`Pull failed: ${pullStderr || pullErr.message}`));
+                    return;
+                }
+
+                // Step 3: Restore stashed changes
+                exec('git stash pop', {
                     cwd: this.repoPath,
-                    maxBuffer: 1024 * 1024 * 10,
-                    timeout: 30000
-                }, (pullErr, pullStdout, pullStderr) => {
-                    if (pullErr) {
-                        exec('git stash pop', { cwd: this.repoPath }, () => { });
-                        reject(new Error(`Pull failed: ${pullStderr || pullErr.message}`));
-                        return;
-                    }
+                    timeout: 10000
+                }, (popErr) => {
+                    // Step 4: Stage lenses.json
+                    exec('git add lenses.json', { cwd: this.repoPath }, (addErr) => {
+                        if (addErr) {
+                            reject(new Error(`Failed to stage: ${addErr.message}`));
+                            return;
+                        }
 
-                    // Step 3: Restore stashed changes
-                    exec('git stash pop', {
-                        cwd: this.repoPath,
-                        timeout: 10000
-                    }, (popErr) => {
-                        // Step 4: Stage lenses.json
-                        exec('git add lenses.json', { cwd: this.repoPath }, (addErr) => {
-                            if (addErr) {
-                                reject(new Error(`Failed to stage: ${addErr.message}`));
-                                return;
-                            }
-
-                            // Step 5: Commit
-                            const commitMsg = `Update lenses - ${new Date().toISOString()}`;
-                            exec(`git commit -m "${commitMsg}"`, {
+                        // Step 5: Commit
+                        const commitMsg = `Update lenses - ${new Date().toISOString()}`;
+                        exec(`git commit -m "${commitMsg}"`, {
+                            cwd: this.repoPath,
+                            timeout: 10000
+                        }, (commitErr, commitStdout, commitStderr) => {
+                            // "nothing to commit" is OK
+                            
+                            // Step 6: Push
+                            exec('git push origin main', {
                                 cwd: this.repoPath,
-                                timeout: 10000
-                            }, (commitErr, commitStdout, commitStderr) => {
-                                // "nothing to commit" is not a real error — continue to push
-                                const nothingToCommit = commitStderr && commitStderr.includes('nothing to commit');
-
-                                // Step 6: Push to remote
-                                exec('git push origin main', {
-                                    cwd: this.repoPath,
-                                    maxBuffer: 1024 * 1024 * 10,
-                                    timeout: 30000
-                                }, (pushErr, pushStdout, pushStderr) => {
-                                    if (pushErr) {
-                                        reject(new Error(`Push failed: ${pushStderr || pushErr.message}`));
-                                        return;
-                                    }
-                                    resolve({
-                                        success: true,
-                                        output: pushStdout,
-                                        message: nothingToCommit ? 'Already up to date' : 'Changes synced successfully'
-                                    });
+                                maxBuffer: 1024 * 1024 * 10,
+                                timeout: 30000
+                            }, (pushErr, pushStdout, pushStderr) => {
+                                if (pushErr) {
+                                    reject(new Error(`Push failed: ${pushStderr || pushErr.message}`));
+                                    return;
+                                }
+                                resolve({
+                                    success: true,
+                                    output: pushStdout,
+                                    message: 'Changes synced successfully'
                                 });
                             });
                         });
@@ -156,7 +154,8 @@ class GitService {
                 });
             });
         });
-    }
+    });
+}
 
     async getLastCommitInfo() {
         if (!this.gitAvailable) {
