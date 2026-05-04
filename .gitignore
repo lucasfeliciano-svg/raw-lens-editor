@@ -1,4 +1,7 @@
-node_modules
-dist/
+node_modules/
+uploads/
+processed/
+previews/
 *.dmg
 *.zip
+.DS_Store
