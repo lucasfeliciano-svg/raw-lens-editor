@@ -32,15 +32,32 @@ for (const p of pathsToTry) {
 let GitService;
 let gitService;
 
+// Always use a writable location for the lens repo
+const lensRepoPath = path.join(os.homedir(), '.sony-lens-manager-lenses');
+
+// Clone the repo if it doesn't exist
+async function ensureLensRepo() {
+    if (!fsSync.existsSync(lensRepoPath)) {
+        console.log('Lens repo not found, cloning...');
+        try {
+            await execPromise(`git clone https://github.com/lucasfeliciano-svg/Lens-Data.git "${lensRepoPath}"`);
+            console.log('✓ Lens repo cloned to', lensRepoPath);
+        } catch (err) {
+            console.log('Could not clone lens repo:', err.message);
+            return false;
+        }
+    }
+    return true;
+}
+
 if (gitServicePath) {
     GitService = require(gitServicePath);
-    gitService = new GitService(path.dirname(gitServicePath));
+    gitService = new GitService(lensRepoPath);
     gitService.initialize().catch(err => {
         console.log('Git service not available, running in local mode');
     });
 } else {
     console.log('git-service.js not found - sync disabled');
-    // Create a dummy gitService that always says unavailable
     gitService = {
         isAvailable: () => false,
         syncStatus: async () => ({ syncAvailable: false, localOnly: true }),
@@ -1428,48 +1445,25 @@ app.post('/api/sync/lenses', async (req, res) => {
         });
     }
 
+    // ADD IT HERE — right after the availability check
+    await ensureLensRepo();
+
     try {
         // The actual lenses file being used by the app
         const activeLensesPath = isElectronProduction
             ? path.join(userDataPath, 'lenses.json')
             : path.join(__dirname, 'lenses.json');
 
-        const lensRepoPath = path.join(__dirname, 'lens-data-repo', 'lenses.json');
+        const lensRepoLensesPath = path.join(lensRepoPath, 'lenses.json');  // changed this line
 
         if (fsSync.existsSync(activeLensesPath)) {
-            await fs.copyFile(activeLensesPath, lensRepoPath);
-            console.log('✓ Copied lenses to lens-data-repo for sync');
+            await fs.copyFile(activeLensesPath, lensRepoLensesPath);  // changed this line
+            console.log('✓ Copied lenses to lens repo for sync');
         }
 
-        // Backup
-        const lensesBackup = await fs.readFile(lensRepoPath, 'utf8');
-        await fs.writeFile(path.join(__dirname, 'lenses_backup.json'), lensesBackup);
-
-        // Sync with git
-        const result = await gitService.sync();
-        const lensesData = await loadLenses();
-
-        res.json({
-            success: true,
-            message: 'Lenses synced successfully',
-            lenses: lensesData.lenses
-        });
+        // ... rest of the sync code ...
     } catch (err) {
-        // Restore backup on failure
-        try {
-            const backupPath = path.join(__dirname, 'lenses_backup.json');
-            if (fsSync.existsSync(backupPath)) {
-                await fs.copyFile(backupPath, path.join(__dirname, 'lenses.json'));
-            }
-        } catch (e) { }
-
-        const lensesData = await loadLenses();
-        res.json({
-            success: true,
-            localOnly: true,
-            message: 'Could not sync with remote. ' + err.message,
-            lenses: lensesData.lenses
-        });
+        // ... error handling ...
     }
 });
 
