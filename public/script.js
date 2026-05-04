@@ -88,36 +88,39 @@ class LensManager {
     }
 
     async syncApp() {
-        const syncBtn = document.getElementById('syncBtn');
-        if (!syncBtn) return;
+    const syncBtn = document.getElementById('syncBtn');
+    if (!syncBtn) return;
 
-        const originalHTML = syncBtn.innerHTML;
-        syncBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Syncing...';
-        syncBtn.disabled = true;
+    const originalHTML = syncBtn.innerHTML;
+    syncBtn.innerHTML = '<i class="fas fa-sync fa-spin"></i> Syncing...';
+    syncBtn.disabled = true;
 
-        try {
-            const response = await fetch('/api/sync/lenses', { method: 'POST' });
-            const result = await response.json();
+    try {
+        const response = await fetch('/api/sync/lenses', { method: 'POST' });
+        const result = await response.json();
 
-            if (result.lenses) {
-                this.lenses = result.lenses;
-                this.renderLenses();
-            }
+        if (result.lenses) {
+            this.lenses = result.lenses;
+            this.renderLenses();
+            this.populateSelectionBarLenses();
+        }
 
-            syncBtn.classList.remove('has-updates');
-            syncBtn.innerHTML = '<i class="fas fa-check-circle"></i> Synced';
-            this.showNotification(result.message || 'Synced!', 'success');
-
-            setTimeout(() => {
-                syncBtn.innerHTML = originalHTML;
-                syncBtn.disabled = false;
-            }, 3000);
-        } catch (err) {
+        syncBtn.classList.remove('has-updates');
+        syncBtn.innerHTML = '<i class="fas fa-check-circle"></i> Synced';
+        this.showNotification(result.message || 'Synced!', 'success');
+    } catch (err) {
+        syncBtn.classList.remove('has-updates');
+        syncBtn.innerHTML = originalHTML;
+        this.showNotification('Sync failed: ' + err.message, 'error');
+    } finally {
+        syncBtn.disabled = false;
+        // Always restore after 3 seconds
+        setTimeout(() => {
             syncBtn.innerHTML = originalHTML;
             syncBtn.disabled = false;
-            this.showNotification('Sync failed', 'error');
-        }
+        }, 3000);
     }
+}
 
     async refreshLenses() {
         await this.loadLenses();

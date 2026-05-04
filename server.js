@@ -580,6 +580,7 @@ const loadLenses = async () => {
     if (isElectronProduction) {
         lensesPath = path.join(userDataPath, 'lenses.json');
         if (!fsSync.existsSync(lensesPath)) {
+            console.log("the lens path is: "+__dirname);
             const packagedLensesPath = path.join(__dirname, 'lenses.json');
             if (fsSync.existsSync(packagedLensesPath)) {
                 await fs.copyFile(packagedLensesPath, lensesPath);
@@ -587,6 +588,7 @@ const loadLenses = async () => {
             }
         }
     } else {
+        console.log("the lens path is: "+__dirname);
         lensesPath = path.join(__dirname, 'lenses.json');
     }
 
@@ -1393,9 +1395,26 @@ app.post('/api/sync/lenses', async (req, res) => {
     }
 
     try {
-        const lensesBackup = await fs.readFile('lenses.json', 'utf8');
-        await fs.writeFile('lenses_backup.json', lensesBackup);
+        // Get the active lenses file path
+        const activeLensesPath = isElectronProduction
+            ? path.join(userDataPath, 'lenses.json')
+            : path.join(__dirname, 'lenses.json');
+        
+        // Get the repo lenses file path (for git)
+        const repoLensesPath = path.join(__dirname, 'lenses.json');
+        
+        // If they're different, copy active to repo
+        if (activeLensesPath !== repoLensesPath) {
+            const activeData = await fs.readFile(activeLensesPath, 'utf8');
+            await fs.writeFile(repoLensesPath, activeData);
+            console.log('✓ Copied active lenses to repo for sync');
+        }
+        
+        // Backup
+        const lensesBackup = await fs.readFile(repoLensesPath, 'utf8');
+        await fs.writeFile(path.join(__dirname, 'lenses_backup.json'), lensesBackup);
 
+        // Sync with git
         const result = await gitService.sync();
         const lensesData = await loadLenses();
 
@@ -1405,8 +1424,12 @@ app.post('/api/sync/lenses', async (req, res) => {
             lenses: lensesData.lenses
         });
     } catch (err) {
+        // Restore backup on failure
         try {
-            await fs.copyFile('lenses_backup.json', 'lenses.json');
+            const backupPath = path.join(__dirname, 'lenses_backup.json');
+            if (fsSync.existsSync(backupPath)) {
+                await fs.copyFile(backupPath, path.join(__dirname, 'lenses.json'));
+            }
         } catch (e) {}
 
         const lensesData = await loadLenses();
