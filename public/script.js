@@ -20,6 +20,10 @@ class LensManager {
         // Load lenses FIRST, then populate dropdown
         await this.loadLenses();
         this.renderLenses();
+        // Check for cloud updates on startup
+        if (navigator.onLine) {
+            this.checkSyncStatus();
+        }
         this.populateSelectionBarLenses(); // Explicit call after lenses loaded
 
         await this.loadOutputDirectory();
@@ -114,6 +118,7 @@ class LensManager {
             this.showNotification('Sync failed', 'error');
         }
     }
+
     async refreshLenses() {
         await this.loadLenses();
         this.renderLenses();
@@ -324,6 +329,22 @@ class LensManager {
                         applyBtn.disabled = true;
                     }
                 }
+            });
+        }
+
+        // Sync button
+        const syncBtn = document.getElementById('syncBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', () => this.syncApp());
+        }
+
+        // Reload lenses button
+        const reloadBtn = document.getElementById('reloadLensesBtn');
+        if (reloadBtn) {
+            reloadBtn.addEventListener('click', async () => {
+                await this.loadLenses();
+                this.renderLenses();
+                this.showNotification('Lenses reloaded', 'success');
             });
         }
 
